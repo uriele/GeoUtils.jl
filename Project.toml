@@ -1,0 +1,17 @@
+name = "GeoUtils"
+uuid = "9e7f6a50-18ad-4244-91e0-d4fb5b087add"
+authors = ["uriele <menarini.marco@gmail.com> and contributors"]
+version = "0.0.1-DEV"
+
+[deps]
+CoordRefSystems = "b46f11dc-f210-4604-bfba-323c1ec968cb"
+
+[compat]
+julia = "1.10"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Aqua", "Test"]
