@@ -50,3 +50,54 @@ function convert_to_array(file::String,skip=15)
     x-> join(x," ") |> x-> String.(split(x)) |> x-> parse.(Float64,x)
   end
 end
+
+abstract type RealNumber end
+struct isRealNumber end
+struct isNotRealNumber end
+
+
+RealNumber(x::T) where T = isNotRealNumber()
+RealNumber(::Type{<:Real}) = isRealNumber()
+RealNumber(x::T) where T<:Real = RealNumber(typeof(x))
+RealNumber(x::U) where U<:Unitful.Quantity = RealNumber(Unitful.ustrip(x))
+
+isRealNumber(x) = isa(x,Number) && !isa(x,Complex)
+function fix_latitudes(lat::AbstractArray{T},orbital_coordinates=true) where T<:Number
+  orbital_coordinates == false && return lat;
+  # if the north pole is zero, we need to fix the latitudes
+  # so that the north pole is at the top of the raster
+  # also if the latitude is smaller than 180 => 90-lat
+  # if the latitude is larger than 180 => lat-270
+  GeoUtils._fix_latitudes(RealNumber(first(lat)),lat)
+end
+
+function fix_latitudes(lat::T,orbital_coordinates=true) where T<:Number
+  orbital_coordinates == false && return lat;
+  # if the north pole is zero, we need to fix the latitudes
+  # so that the north pole is at the top of the raster
+  # also if the latitude is smaller than 180 => 90-lat
+  # if the latitude is larger than 180 => lat-270
+  GeoUtils._fix_latitudes(RealNumber(lat),lat)
+end
+
+@inline _fix_latitudes(::isNotRealNumber,lat)= throw(ArgumentError("The latitude should be a real number"))
+
+@inline function _fix_latitudes(::isRealNumber,lat::AbstractArray{T}) where T<:Real
+  return [GeoUtils._conversion_latitude(_lat) for _lat in @. mod(lat,360)]
+end
+
+@inline function _fix_latitudes(::isRealNumber,lat::T) where T<:Real
+  return GeoUtils._conversion_latitude(lat )
+end
+
+@inline function _fix_latitudes(::isRealNumber,lat::AbstractArray{U}) where U<:Unitful.Quantity
+  _unit=Unitful.unit(first(lat));
+  return GeoUtils._fix_latitudes(isRealNumber(),ustrip(lat)).*_unit
+end
+
+@inline function _fix_latitudes(::isRealNumber,lat::T) where T<:Unitful.Quantity
+  _unit=Unitful.unit(lat);
+  return GeoUtils._fix_latitudes(isRealNumber(),ustrip(lat)).*_unit
+end
+
+@inline _conversion_latitude(x::T) where T<:Real= x <= 180 ? (90 - x) : (x -270)
