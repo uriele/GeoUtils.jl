@@ -101,3 +101,8 @@ end
 end
 
 @inline _conversion_latitude(x::T) where T<:Real= x <= 180 ? (90 - x) : (x -270)
+
+latitude(x::CoordRefSystems.Geographic)= x.lat;
+longitude(x::CoordRefSystems.Geographic)=x.lon;
+altitude(x::GeocentricLatLonAlt)=x.alt;
+altitude(x::LatLonAlt)=x.alt;

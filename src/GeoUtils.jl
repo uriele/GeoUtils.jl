@@ -3,18 +3,11 @@ module GeoUtils
   using Unitful: ustrip,unit,°,m,km
   using CoordRefSystems
   using DataFrames
-  using Rasters
-  using DimensionalData: @dim, XDim, YDim, ZDim
-
   include("Utils.jl")
-  # This might be an extension of Rasters.jl
-  @dim Lat YDim "Latitude"
-  @dim Alt ZDim "Altitude"
-  @dim Lon XDim "Longitude"
 
   export Lat, Alt, Lon, get_data
   export RealNumber,isRealNumber,isNotRealNumber
-
+  export latitude,longitude,altitude
   """
     get_data(path::String,info::String="temp",skip=13;sink=DataFrame,orbital_coordinates=true)
 
@@ -43,49 +36,52 @@ module GeoUtils
       # We assume that the name of the directory is the value of the longitude,
       # and we divide by 10 to get the actual value. According to Bianca the files
       # content is not used, so we do not need to project it.
-      data_lon= @. subdirs/10.0;
+      #data_lon= @. subdirs/10.0;
       #lengths of the arrays
       lat_length = length(data_lat);
       alt_length = length(data_alt);
 
-      lon_length = length(data_lon);
+      lon_length = length(subdirs);
 
       data= Array{T,3}(undef,lat_length,lon_length,alt_length);
 
+      spatial_dimension_lon=similar(data);
+
       @inbounds for (i,directory) in enumerate(subdirs)
         data[:,i,:]=GeoUtils.convert_to_array(string(directory)*"/in_"*info*".dat",skip);
+        tmp_lon=@view spatial_dimension_lon[:,i,:];
+
+        tmp_lon=repeat(GeoUtils.convert_to_array(string(directory)*"/in_lon.dat"),alt_length);
       end
 
       data=data[idx_lat,:,:];
-      if (sink != Raster)
+      #if (sink != Raster)
         spatial_dimension_lat=similar(data);
-        spatial_dimension_lon=similar(spatial_dimension_lat);
         spatial_dimension_alt=similar(spatial_dimension_lat);
         [spatial_dimension_lat[:,i,j]=data_lat for i in 1:lon_length,j in 1:alt_length]
-        [spatial_dimension_lon[i,:,j]=data_lon for i in 1:lat_length,j in 1:alt_length]
         [spatial_dimension_alt[i,j,:]=data_alt for i in 1:lat_length,j in 1:lon_length]
-        @info "Spatial dimension lat: $(length(spatial_dimension_lat))"
-        @info "Spatial dimension lon: $(length(spatial_dimension_lon))"
-        @info "Spatial dimension alt: $(length(spatial_dimension_alt))"
         @info "Data dimensions: $(size(data[:]))"
-        data=hcat(spatial_dimension_lat[:],spatial_dimension_lon[:],spatial_dimension_alt[:],data[:]);
-      end
+        data=hcat(GeocentricLatLonAlt.(spatial_dimension_lat[:],spatial_dimension_lon[:],spatial_dimension_alt[:]),data[:]);
+
+        @info size(data)
+      #end
 
       if sink==Matrix
         return data
       end
 
       if sink==DataFrame
-        return DataFrame(data,[:lon,:lat,:alt,Symbol(info)])
+        return DataFrame(data,[:coord,Symbol(info)])
       end
 
+      #=
       if (sink == Raster)
         _lat = Lat(data_lat)#.*°);
         _alt = Alt(data_alt)#.*km);
         _lon = Lon(data_lon)#.*°);
         return Raster(data,(_lat,_lon,_alt))
       end
-
+      =#
       error("Unknown sink type")
     end
   end
