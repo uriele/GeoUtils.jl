@@ -1,13 +1,16 @@
 module GeoUtils
-  using Unitful
-  using Unitful: ustrip,unit,°,m,km
-  using CoordRefSystems
-  using DataFrames
+  using Reexport
+  @reexport using Unitful
+  @reexport using Unitful: ustrip,unit,°,m,km
+  @reexport using CoordRefSystems
+  @reexport using DataFrames
   include("Utils.jl")
 
   export Lat, Alt, Lon, get_data
   export RealNumber,isRealNumber,isNotRealNumber
   export latitude,longitude,altitude
+  export unique_altitudes,unique_latitudes,unique_longitudes
+
   """
     get_data(path::String,info::String="temp",skip=13;sink=DataFrame,orbital_coordinates=true)
 
@@ -28,8 +31,9 @@ module GeoUtils
 
       # get lat and alt from first file since they are the same for all files
       data_lat=GeoUtils.fix_latitudes(GeoUtils.convert_to_array(string(subdirs[1])*"/in_lat.dat"),orbital_coordinates);
-      idx_lat=sortperm(data_lat);
-      data_lat=data_lat[idx_lat];
+      #idx_lat=sortperm(data_lat);
+      #@info idx_lats
+      #data_lat=data_lat[idx_lat];
 
       data_alt=GeoUtils.convert_to_array(string(subdirs[1])*"/in_alt.dat",16);
       T=eltype(data_alt)
@@ -49,19 +53,25 @@ module GeoUtils
 
       @inbounds for (i,directory) in enumerate(subdirs)
         data[:,i,:]=GeoUtils.convert_to_array(string(directory)*"/in_"*info*".dat",skip);
-        tmp_lon=@view spatial_dimension_lon[:,i,:];
 
-        tmp_lon=repeat(GeoUtils.convert_to_array(string(directory)*"/in_lon.dat"),alt_length);
+        tmp=GeoUtils.convert_to_array(string(directory)*"/in_lon.dat");
+        [spatial_dimension_lon[:,i,j]=tmp for j in 1:alt_length]
+
       end
 
-      data=data[idx_lat,:,:];
+      #data=data[idx_lat,:,:];
       #if (sink != Raster)
         spatial_dimension_lat=similar(data);
         spatial_dimension_alt=similar(spatial_dimension_lat);
         [spatial_dimension_lat[:,i,j]=data_lat for i in 1:lon_length,j in 1:alt_length]
         [spatial_dimension_alt[i,j,:]=data_alt for i in 1:lat_length,j in 1:lon_length]
         @info "Data dimensions: $(size(data[:]))"
-        data=hcat(GeocentricLatLonAlt.(spatial_dimension_lat[:],spatial_dimension_lon[:],spatial_dimension_alt[:]),data[:]);
+        #(spatial_dimension_lat2,spatial_dimension_lon2)= GeocentricLatLonAlt.(spatial_dimension_lat[:],spatial_dimension_lon[:],spatial_dimension_alt[:]) |>
+        #x-> convert.(LatLonAlt,x) |>
+        #x-> (latitude.(x),longitude.(x));
+        #data=t(convert.(LatLonAlt,spatial_data),data[:]);
+
+        data=[ustrip.(spatial_dimension_lat[:] spatial_dimension_lon[:].*° spatial_dimension_alt[:].*m data[:]];
 
         @info size(data)
       #end
@@ -71,7 +81,7 @@ module GeoUtils
       end
 
       if sink==DataFrame
-        return DataFrame(data,[:coord,Symbol(info)])
+        return DataFrame(data,[:lat,:lon,:alt,Symbol(info)])
       end
 
       #=
@@ -87,8 +97,47 @@ module GeoUtils
   end
 
   """
+    unique_altitudes(data::DataFrame)
+    unique_altitudes(data::Matrix)
 
-"""
+  This function returns the unique altitudes in the data.
+  """
+  function unique_altitudes(data::DataFrame)
+    return unique(@. altitude(data[!,:coord]))
+  end
+  function unique_altitudes(data::Matrix)
+    return unique(@. altitude(data[:,1]))
+  end
+
+  """
+    unique_longitudes(data::DataFrame)
+    unique_longitudes(data::Matrix)
+
+  This function returns the unique longitudes in the data.
+  """
+  function unique_longitudes(data::DataFrame)
+    return unique(@. longitude(data[!,:coord]))
+  end
+  function unique_longitudes(data::Matrix)
+    return unique(@. longitude(data[:,1]))
+  end
+
+  """
+    unique_latitudes(data::DataFrame)
+    unique_latitudes(data::Matrix)
+
+  This function returns the unique latitudes in the data.
+  """
+  function unique_latitudes(data::DataFrame)
+    return unique(@. latitude(data[!,:coord]))
+  end
+  function unique_latitudes(data::Matrix)
+    return unique(@. latitude(data[:,1]))
+  end
+
+  """
+
+  """
 
 
 end

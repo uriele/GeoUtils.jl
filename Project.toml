@@ -7,14 +7,15 @@ version = "0.0.1-DEV"
 CoordRefSystems = "b46f11dc-f210-4604-bfba-323c1ec968cb"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 GeometryOps = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
+Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [weakdeps]
-Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 
 [extensions]
-GeoMakieExt=["Makie","GeoMakie"]
+GeoMakieExt = ["Makie", "GeoMakie"]
 
 [compat]
 julia = "1.10"
