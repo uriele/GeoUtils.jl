@@ -225,7 +225,7 @@ let
 	@info size(__z)
 	@info size(__val1)
 	
-	meshscatter!(ax2,ustrip.(__x)[:],ustrip.(__y)[:],ustrip.(__z)[:];color=__val1[:],colormap=colormap,alpha=0.9,markersize=100)
+	meshscatter!(ax2,ustrip.(__x)[:],ustrip.(__y)[:],ustrip.(__z)[:];color=__val1[:],colormap=colormap,alpha=0.5)
 	fig2
 
 	xlims!(ax2,4500,5000)
