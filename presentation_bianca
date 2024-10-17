@@ -1,0 +1,150 @@
+### A Pluto.jl notebook ###
+# v0.20.0
+
+using Markdown
+using InteractiveUtils
+
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
+# ╔═╡ f1dacc60-8be3-11ef-2407-d5dedc774620
+begin
+    import Pkg
+    # careful: this is _not_ a reproducible environment
+    # activate the global environment
+    Pkg.activate(".")
+	Pkg.add("GeoMakie")
+	Pkg.add("PlutoUI")
+	Pkg.add("GADM")
+	Pkg.add("GeometryOps")
+	Pkg.instantiate()
+	using GeoUtils
+	using Makie
+	using WGLMakie
+	using ScatteredInterpolation
+	using Unitful
+	using PlutoUI
+	str=["vash_"*string(i)*"_prof" for i in 1:10];
+	df=unique(GeoUtils.get_data("data",str,11;initial_lat=9));
+	sort!(df,:alt);
+	_lat,_lon,_alt=unique.((df.lat,df.lon,df.alt));
+	(_lon_min,_lon_max)=extrema(df.lon)
+	df
+end
+
+# ╔═╡ 8fb3b1b8-d0ed-45f9-883b-db15e62596bb
+Pkg.add("GeoMakie")
+
+# ╔═╡ c3475450-4381-45a0-8837-e6891eaa8db4
+using GeoMakie
+
+# ╔═╡ 0da23ae1-b5b9-4a06-913a-eba588452bb1
+md"""
+1. Filter the data in the range of Latitude 35° to 45°
+2. Filter the altitude between 20km to 100km (all other values are of the order of 10^-6)
+"""
+
+# ╔═╡ d4be1fab-5a6a-44c0-8348-d19cf0dabb8c
+md"""
+# Range of Interest
+1. Latitude Minimum $(@bind _lat_min PlutoUI.Select(_lat,default=_lat[1]))
+1. Latitude Maximum $(@bind _lat_max PlutoUI.Select(_lat,default=_lat[end-1]))
+1. Altitude Minimum $(@bind _alt_min PlutoUI.Select(_alt,default=_alt[21]))
+1. Altitude Maximum $(@bind _alt_max PlutoUI.Select(_alt,default=_alt[end]))
+1. File $(@bind _info PlutoUI.Select(str))
+"""
+
+# ╔═╡ 9a95bae7-ede0-4766-8097-b63632d639cd
+begin
+	df_filtered=df[(_lat_min.<=df.lat.<_lat_max) .& (_alt_min.<=df.alt.<=_alt_max),:]
+	sort!(df_filtered,:alt);
+end
+
+# ╔═╡ c79e1274-9de4-4102-9dd7-94e0422e9187
+begin
+	__lat=(df_filtered.lat)
+	__lon=(df_filtered.lon)
+	__alt=df_filtered.alt
+	__val=df_filtered[!,_info]
+	__lat_length=length(unique(__lat));
+	__lon_length=122;
+	__alt_length=length(unique(__alt))
+	
+	__lat,__lon,__alt,__val=reshape.([__lat,__lon,__alt,__val],__lat_length,__lon_length,__alt_length)
+	
+	__alt=__alt[1,1,:]
+	md"Altitude $(@bind _selected_height_ PlutoUI.Slider(__alt))"	
+end
+
+# ╔═╡ 96e93603-098b-4a80-84c6-32220c208b85
+begin
+	using GADM
+	import GeometryOps as GO
+	ita_df = GADM.get("ITA"; depth = 1) |> DataFrame
+	ita_centroid = GO.centroid(ita_df.geom)
+
+	fig = Figure()
+	ga = GeoAxis(
+	    fig[1, 1];
+		title="Altitude "*string(_selected_height_),
+	    dest = "+proj=ortho +lon_0=$(ita_centroid[1]) +lat_0=$(ita_centroid[2])"
+	)	
+	poly!(
+	    ga, ita_df.geom;
+	    color = 1:size(ita_df, 1), # this could be any vector of length `size(ita_df, 1)`
+	    strokecolor = :blue, strokewidth = 1, shading = NoShading
+	    )
+	idx=findfirst(x->x==_selected_height_,__alt)
+	@info idx
+	colormap=to_colormap(:plasma)
+	colormap[1] = RGBAf(0,0,0,0)
+	surface!(ga,Matrix(__lon[:,:,idx]),Matrix(__lat[:,:,idx]),Matrix(__val[:,:,idx]);
+	colormap=colormap)
+	
+	fig
+end
+
+# ╔═╡ ea6a43c5-dc4f-4bdb-92d5-0a14fdbe0a82
+extrema(__lon[:,:,10])
+
+# ╔═╡ 19ce3688-bf76-4554-a063-3225468bcbe8
+let
+	df2=DataFrame(:x=>df_filtered.lon,:y=>df_filtered.lat,:z=>df_filtered.alt,:val=>df_filtered[!,_info])
+	df2=df2[df2.val.>=0,:]
+	fig2=Figure()
+	ax2=Axis3(fig2[1,1],title=_info,
+	xlabel="Longitude °",
+	ylabel="Latitude °",
+	zlabel="Altitude km")
+
+	
+	meshscatter!(ax2,ustrip.( df2.x),ustrip.(df2.y),ustrip.(df2.z);color=df2.val,colormap=colormap)
+	poly!(
+	    ax2, ita_df.geom;
+	    color = 1:size(ita_df, 1), # this could be any vector of length `size(ita_df, 1)`
+	    strokecolor = :blue, strokewidth = 1, shading = NoShading
+	    )
+	zlims!(ax2,ustrip.(extrema(df2.z)))
+	xlims!(ax2,6,22)
+	ylims!(ax2,35,48)
+	fig2
+end
+
+# ╔═╡ Cell order:
+# ╟─f1dacc60-8be3-11ef-2407-d5dedc774620
+# ╟─8fb3b1b8-d0ed-45f9-883b-db15e62596bb
+# ╟─c3475450-4381-45a0-8837-e6891eaa8db4
+# ╟─0da23ae1-b5b9-4a06-913a-eba588452bb1
+# ╟─d4be1fab-5a6a-44c0-8348-d19cf0dabb8c
+# ╟─9a95bae7-ede0-4766-8097-b63632d639cd
+# ╟─c79e1274-9de4-4102-9dd7-94e0422e9187
+# ╠═96e93603-098b-4a80-84c6-32220c208b85
+# ╟─ea6a43c5-dc4f-4bdb-92d5-0a14fdbe0a82
+# ╠═19ce3688-bf76-4554-a063-3225468bcbe8

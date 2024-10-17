@@ -6,9 +6,18 @@ version = "0.0.1-DEV"
 [deps]
 CoordRefSystems = "b46f11dc-f210-4604-bfba-323c1ec968cb"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+GADM = "a8dd9ffe-31dc-4cf5-a379-ea69100a8233"
+GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
 GeometryOps = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
+Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+NIfTI = "a3a9e032-41b5-5fc4-967a-a6b7a19844d3"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
+ScatteredInterpolation = "3f865c0f-6dca-5f4d-999b-29fe1e7e3c92"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
 [weakdeps]
 GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
@@ -18,6 +27,13 @@ Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 GeoMakieExt = ["Makie", "GeoMakie"]
 
 [compat]
+GADM = "1.2.0"
+GeoMakie = "0.7.5"
+GeometryOps = "0.1.12"
+Makie = "0.21.14"
+PlutoUI = "0.7.60"
+Statistics = "1.11.1"
+WGLMakie = "0.10.14"
 julia = "1.10"
 
 [extras]
