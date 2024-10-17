@@ -63,6 +63,9 @@ module GeoUtils
       end
       spatial_dimension_lon=similar(data);
 
+      fold=similar(data);
+
+      [fold[:,i,:].=i for i in 1:lon_length]
       @info skip
       @inbounds for (i,directory) in enumerate(subdirs)
         for (sk,info) in zip(skip,Info)
@@ -105,6 +108,10 @@ module GeoUtils
       x-> x[initial_alt:end,:,initial_lat:end] |> x-> x[:];
       spatial_dimension_alt= reshape(spatial_dimension_alt,alt_length,lon_length,lat_length) |>
       x-> x[initial_alt:end,:,initial_lat:end] |> x-> x[:];
+      fold= reshape(fold,alt_length,lon_length,lat_length) |>
+      x-> x[initial_alt:end,:,initial_lat:end] |> x-> x[:];
+
+
       for info in Info
         all_data[info]= all_data[info] |>
         x-> x[initial_alt:end,:,initial_lat:end] ;
@@ -117,6 +124,7 @@ module GeoUtils
         data[:,1]=ustrip.(spatial_dimension_lat2);
         data[:,2]=ustrip.(spatial_dimension_lon2);
         data[:,3]=spatial_dimension_alt;
+        data[:,4]=fold[:];
         for (i,info) in enumerate(Info)
           data[:,i+3]=all_data[info][:];
         end
@@ -130,6 +138,7 @@ module GeoUtils
           "lat"=>spatial_dimension_lat2,
           "lon"=>spatial_dimension_lon2,
           "alt"=>spatial_dimension_alt[:].*km,
+          "lon_folder"=>fold[:],
           [info=>all_data[info][:] for info in Info]...
         )
       end

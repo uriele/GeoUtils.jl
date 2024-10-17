@@ -40,7 +40,7 @@ begin
 	
 	df=unique(GeoUtils.get_data("data",str,str_skip;initial_lat=9));
 	
-	sort!(df,[:alt,:lat])
+	sort!(df,[:alt,:lon_folder,:lat])
 	_lat,_lon,_alt=unique.((df.lat,df.lon,df.alt));
 	(_lon_min,_lon_max)=extrema(df.lon)
 	df
@@ -53,7 +53,8 @@ Pkg.add("GeoMakie")
 # ╔═╡ c3475450-4381-45a0-8837-e6891eaa8db4
 using GeoMakie
 
-# ╔═╡ f678896f-0826-438c-97dd-400b99387111
+# ╔═╡ 8d049e9e-08fe-4422-9921-1a0f7759d18c
+val_plot=names(df[:,Not(:lon,:lat,:alt,:lon_folder)])
 
 
 # ╔═╡ 0da23ae1-b5b9-4a06-913a-eba588452bb1
@@ -69,23 +70,15 @@ md"""
 1. Latitude Maximum $(@bind _lat_max PlutoUI.Select(_lat,default=_lat[end-1]))
 1. Altitude Minimum $(@bind _alt_min PlutoUI.Select(_alt,default=_alt[21]))
 1. Altitude Maximum $(@bind _alt_max PlutoUI.Select(_alt,default=_alt[end]))
-1. File $(@bind _info PlutoUI.Select(str))
+1. File $(@bind _info PlutoUI.Select(val_plot))
 """
 
 # ╔═╡ 9a95bae7-ede0-4766-8097-b63632d639cd
 begin
 	df_filtered=df[(_lat_min.<=df.lat.<_lat_max) .& (_alt_min.<=df.alt.<=_alt_max),:]
-	sort!(df_filtered,[:alt,:lat]);
-	
+	#sort!(df_filtered,[:alt,:lat]);
+	df_filtered[:,[:lat,:lon,:alt,Symbol(_info)]]
 end
-
-# ╔═╡ ee572a46-c410-4981-b40d-1ef490accc93
-let
-	str=names(df_filtered[:,Not(:lon,:lat,:alt)])
-end
-
-# ╔═╡ 9f9ee0e2-285b-435c-8a14-88b4da2ecb7a
-names(df_filtered[:,Not(:lon,:lat,:alt)])
 
 # ╔═╡ c79e1274-9de4-4102-9dd7-94e0422e9187
 begin
@@ -98,8 +91,10 @@ begin
 	__alt_length=length(unique(__alt))
 	
 	__lat,__lon,__alt,__val=reshape.([__lat,__lon,__alt,__val],__lat_length,__lon_length,__alt_length)
-	
+	__alt1=copy(__alt)
+	__lat1=copy(__lat)
 	__alt=__alt[1,1,:]
+	__lat1=unique(__lat1)
 	md"Altitude $(@bind _selected_height_ PlutoUI.Slider(__alt))"	
 end
 
@@ -142,7 +137,7 @@ begin
 	__val1=(__val.-__val_lim[1])./(__val_lim[2]-__val_lim[1])
 	scatter!(ga,Matrix(__lon[:,:,idx])[:],Matrix(__lat[:,:,idx])[:];color=Matrix(__val1[:,:,idx])[:],
 	colormap=colormap)
-	Colorbar(fig[1,2],colormap=colormap,limits=extrema(__val))
+	Colorbar(fig[1,2],colormap=colormap,limits=extrema(__val),label="μg/kg-dryair")
 	#=
 	surface!(ga,Matrix(__lon[:,:,idx]),Matrix(__lat[:,:,idx]),Matrix(__val[:,:,idx]);
 	colormap=colormap)
@@ -165,7 +160,7 @@ begin
 	scatter!(gx,coord_lon,coord_lat;color=field,colormap=colormap)
 	
 		
-	Colorbar(fig1[1,2],colormap=colormap,limits=extrema(__val))
+	Colorbar(fig1[1,2],colormap=colormap,limits=extrema(__val),label="μg/kg-dryair")
 	fig1
 	
 	record(fig1,"fig1_bianca.mp4",frames;framerate=frame_rate) do frame
@@ -181,21 +176,12 @@ begin
 	
 end
 
-# ╔═╡ 960fc084-75e9-4557-8694-2831611ec665
-extrema(__val1[:,:,end])
-
-# ╔═╡ 0116c652-f918-4757-8328-accb91294cc3
-ga.title.val
-
-# ╔═╡ 60b3f5e1-3b2e-4fed-8b33-35c27aa94626
-let
-cc=GADM.get("ITA")
-end
-
-# ╔═╡ ea6a43c5-dc4f-4bdb-92d5-0a14fdbe0a82
-extrema(__lon[:,:,10])
+# ╔═╡ f62c579c-a818-464c-9cb7-e64ce99bda81
+fig
 
 # ╔═╡ 10eab0ea-4fbb-4253-85c7-76c6ec9753c7
+# ╠═╡ disabled = true
+#=╠═╡
 let
 	
 	fig2=Figure()
@@ -225,7 +211,7 @@ let
 	@info size(__z)
 	@info size(__val1)
 	
-	meshscatter!(ax2,ustrip.(__x)[:],ustrip.(__y)[:],ustrip.(__z)[:];color=__val1[:],colormap=colormap,alpha=0.9,markersize=100)
+	meshscatter!(ax2,ustrip.(__x)[:],ustrip.(__y)[:],ustrip.(__z)[:];color=__val1[:],colormap=colormap,alpha=0.9,markersize=10)
 	fig2
 
 	xlims!(ax2,4500,5000)
@@ -236,8 +222,11 @@ let
     
 	end
 end
+  ╠═╡ =#
 
 # ╔═╡ 72ec1dbd-54ad-4237-8fc4-2686461ff0e0
+# ╠═╡ disabled = true
+#=╠═╡
 let
 	
 	fig2=Figure()
@@ -268,22 +257,93 @@ let
     
 	end
 end
+  ╠═╡ =#
+
+# ╔═╡ 9298d099-f189-47e8-ab3c-50ecd4a9b5c3
+let
+
+	fig = Figure()		
+	
+	function make_fig(_fig,_title)
+		ga = Axis(
+		    _fig[1, 1];
+			title=_title,
+			xlabel="Longitude °",
+			ylabel="Altitude km"
+		)	
+		return ga	
+	end
+
+	
+	fig1=Figure()
+	coord_lon=Observable(Matrix(__lon[1,:,:]));
+	coord_alt=Observable(ustrip.(Matrix(__alt1[1,:,:])));
+	field    =Observable(Matrix(__val1[1,:,:]));
+	
+	@info size(coord_lon[])
+	@info size(coord_alt[])
+	@info size(field[])
+	@info size(__lat1)
+	frames =1:(length(__lat1)-1);
+	
+	frame_rate= 10;
+	
+	title_obs = Observable("Latitude: "*string(__lat1[1]))
+	
+	
+	gx = make_fig(fig1,title_obs);
+	surface!(gx,coord_lon,coord_alt,field,colormap=colormap)
+	
+		
+	Colorbar(fig1[1,2],colormap=colormap,limits=extrema(__val),label="μg/kg-dryair")
+	fig1
+	ylims!(gx,0,20)
+	record(fig1,"fig2_bianca.mp4",frames;framerate=frame_rate) do frame
+		
+    	title_obs[] = "Latitude: "*string(__lat[frame,1,1])
+		coord_lon[]=Matrix(__lon[frame,:,:]);
+		coord_alt[]=Matrix(ustrip.(__alt1[frame,:,:]));
+		vv=Matrix(__val1[frame,:,:]);
+		vv[end]=1.e-16;
+		field[]    =vv;
+	end
+
+	fig2=Figure()
+	coord_lon=Observable(Matrix(__lon[1,:,:])[:]);
+	coord_alt=Observable(ustrip.(Matrix(__alt1[1,:,:]))[:]);
+	field    =Observable(Matrix(__val1[1,:,:])[:]);
+	title_obs = Observable("Latitude: "*string(__lat1[1]))
+	
+	gx = make_fig(fig2,title_obs);
+	scatter!(gx,coord_lon,coord_alt; color=field,colormap=colormap,alpha=0.8,markersize=20)
+	
+	Colorbar(fig2[1,2],colormap=colormap,limits=extrema(__val),label="μg/kg-dryair")
+	fig1
+	ylims!(gx,0,20)
+	record(fig2,"fig3_bianca.mp4",frames;framerate=frame_rate) do frame
+		
+    	title_obs[] = "Latitude: "*string(__lat[frame,1,1])
+		coord_lon[]=Matrix(__lon[frame,:,:])[:];
+		coord_alt[]=Matrix(ustrip.(__alt1[frame,:,:]))[:];
+		vv=Matrix(__val1[frame,:,:])[:];
+		vv[end]=1.e-16;
+		field[]    =vv;
+	end
+
+	
+end
 
 # ╔═╡ Cell order:
 # ╠═f1dacc60-8be3-11ef-2407-d5dedc774620
-# ╠═f678896f-0826-438c-97dd-400b99387111
-# ╠═ee572a46-c410-4981-b40d-1ef490accc93
 # ╟─8fb3b1b8-d0ed-45f9-883b-db15e62596bb
-# ╟─c3475450-4381-45a0-8837-e6891eaa8db4
+# ╠═c3475450-4381-45a0-8837-e6891eaa8db4
+# ╠═8d049e9e-08fe-4422-9921-1a0f7759d18c
 # ╠═0da23ae1-b5b9-4a06-913a-eba588452bb1
-# ╠═d4be1fab-5a6a-44c0-8348-d19cf0dabb8c
-# ╠═9f9ee0e2-285b-435c-8a14-88b4da2ecb7a
+# ╟─d4be1fab-5a6a-44c0-8348-d19cf0dabb8c
 # ╠═9a95bae7-ede0-4766-8097-b63632d639cd
-# ╠═c79e1274-9de4-4102-9dd7-94e0422e9187
+# ╟─c79e1274-9de4-4102-9dd7-94e0422e9187
 # ╠═96e93603-098b-4a80-84c6-32220c208b85
-# ╠═960fc084-75e9-4557-8694-2831611ec665
-# ╠═0116c652-f918-4757-8328-accb91294cc3
-# ╠═60b3f5e1-3b2e-4fed-8b33-35c27aa94626
-# ╟─ea6a43c5-dc4f-4bdb-92d5-0a14fdbe0a82
+# ╠═f62c579c-a818-464c-9cb7-e64ce99bda81
 # ╠═10eab0ea-4fbb-4253-85c7-76c6ec9753c7
 # ╠═72ec1dbd-54ad-4237-8fc4-2686461ff0e0
+# ╠═9298d099-f189-47e8-ab3c-50ecd4a9b5c3
