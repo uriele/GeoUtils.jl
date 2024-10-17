@@ -26,6 +26,11 @@ module GeoUtils
   function get_data(path::String,Info::Vector{String}=["temp"],skip=13;initial_lat::Integer=1,initial_alt::Integer=1,sink=DataFrame,orbital_coordinates=true)
     cd(path) do
       @assert (length(skip)==1 || length(skip)==length(Info)) "The skip parameter should be a single value or a vector of the same length as the info parameter"
+
+      if length(skip)==1
+        skip=fill(skip[1],length(Info))
+      end
+      Info=copy(Info)
       subdirs=sort(parse.(Int,readdir()))
       # Check if all files are the same
       @assert(GeoUtils.all_files_are_same(".","in_lat.dat"),"in_lat.dat files are not the same")
@@ -50,7 +55,7 @@ module GeoUtils
       lon_length = length(subdirs);
 
 
-      data= Array{T,3}(undef,lat_length,lon_length,alt_length);
+      data= Array{T,3}(undef,alt_length,lon_length,lat_length);
 
       all_data=Dict{String,Array{T,3}}();
       for info in Info
@@ -58,33 +63,51 @@ module GeoUtils
       end
       spatial_dimension_lon=similar(data);
 
+      @info skip
       @inbounds for (i,directory) in enumerate(subdirs)
-        for info in Info
-          all_data[info][:,i,:]=GeoUtils.convert_to_array(string(directory)*"/in_"*info*".dat",skip);
+        for (sk,info) in zip(skip,Info)
+          @debug sk info
+          if info !="vmr_prof"
+            @debug "Reading $directory $info"
+            all_data[info][:,i,:]=GeoUtils.convert_to_array(string(directory)*"/in_"*info*".dat",sk);
+          else
+            newfiles=parse_vrm_profile(string(directory),"in_vmr_prof.dat");
+            for newfile in newfiles
+              if !haskey(all_data,newfile[1:end-4])
+                push!(Info,newfile[1:end-4]);
+                all_data[newfile[1:end-4]]=similar(data);
+              end
+              all_data[newfile[1:end-4]][:,i,:]=GeoUtils.convert_to_array(string(directory)*"/"*newfile,0);
+            end
+          end
         end
         tmp=GeoUtils.convert_to_array(string(directory)*"/in_lon.dat");
-        [spatial_dimension_lon[:,i,j]=tmp for j in 1:alt_length]
+        [spatial_dimension_lon[j,i,:]=tmp for j in 1:alt_length]
       end
 
       spatial_dimension_lat=similar(data);
       spatial_dimension_alt=similar(spatial_dimension_lat);
-      [spatial_dimension_lat[:,i,j]=data_lat for i in 1:lon_length,j in 1:alt_length]
-      [spatial_dimension_alt[i,j,:]=data_alt for i in 1:lat_length,j in 1:lon_length]
+      @info size(spatial_dimension_lat)
+      @info size(spatial_dimension_lon)
+      @info size(spatial_dimension_alt)
+      @info size(data)
+      [spatial_dimension_lat[j,i,:]=data_lat for i in 1:lon_length,j in 1:alt_length]
+      [spatial_dimension_alt[:,j,i]=data_alt for i in 1:lat_length,j in 1:lon_length]
       @info "Data dimensions: $(size(data[:]))"
       spatial_dimension_lat2,spatial_dimension_lon2= GeocentricLatLonAlt.(spatial_dimension_lat[:],spatial_dimension_lon[:],spatial_dimension_alt[:]) |>
       x-> convert.(LatLonAlt,x) |>
       x-> (latitude.(x),longitude.(x));
 
       # FILTER INITIAL LAT AND ALT
-      spatial_dimension_lat2= reshape(spatial_dimension_lat2,lat_length,lon_length,alt_length) |>
-      x-> x[initial_lat:end,:,initial_alt:end] |> x-> x[:];
-      spatial_dimension_lon2= reshape(spatial_dimension_lon2,lat_length,lon_length,alt_length) |>
-      x-> x[initial_lat:end,:,initial_alt:end] |> x-> x[:];
-      spatial_dimension_alt= reshape(spatial_dimension_alt,lat_length,lon_length,alt_length) |>
-      x-> x[initial_lat:end,:,initial_alt:end] |> x-> x[:];
+      spatial_dimension_lat2= reshape(spatial_dimension_lat2,alt_length,lon_length,lat_length) |>
+      x-> x[initial_alt:end,:,initial_lat:end] |> x-> x[:];
+      spatial_dimension_lon2= reshape(spatial_dimension_lon2,alt_length,lon_length,lat_length) |>
+      x-> x[initial_alt:end,:,initial_lat:end] |> x-> x[:];
+      spatial_dimension_alt= reshape(spatial_dimension_alt,alt_length,lon_length,lat_length) |>
+      x-> x[initial_alt:end,:,initial_lat:end] |> x-> x[:];
       for info in Info
         all_data[info]= all_data[info] |>
-        x-> x[initial_lat:end,:,initial_alt:end] ;
+        x-> x[initial_alt:end,:,initial_lat:end] ;
       end
 
 
@@ -102,7 +125,7 @@ module GeoUtils
 
       if sink==DataFrame
 
-
+        @info Info
         return DataFrame(
           "lat"=>spatial_dimension_lat2,
           "lon"=>spatial_dimension_lon2,

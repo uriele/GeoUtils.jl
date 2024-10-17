@@ -106,3 +106,35 @@ latitude(x::CoordRefSystems.Geographic)= x.lat;
 longitude(x::CoordRefSystems.Geographic)=x.lon;
 altitude(x::GeocentricLatLonAlt)=x.alt;
 altitude(x::LatLonAlt)=x.alt;
+
+
+function parse_vrm_profile(directory::String,file::String)
+  _files=[];
+  cd(directory) do
+    open(file, "r") do f
+      text=readlines(f)
+      regex_dividers=regex=r"^\s{2,4}[0-9]{1,3}";
+      regex_title=r"[0-9]{1,3}\s([a-z,A-Z,0-9\+]*)\s?";
+      dividers=findall([!isnothing(match.(regex,line)) for line in text])
+      @debug dividers
+
+      titles=[string(title.captures[1])  for title in match.(regex_title,text[dividers])]
+
+      push!(dividers,length(text)+1)
+
+      for (i,t) in enumerate(titles)
+        push!(_files,"vrm_"*string(t)*".dat");
+        if !isfile("vrm_"*string(t)*".dat")
+          open("vrm_"*string(t)*".dat","w") do f
+            for str in text[dividers[i]+1:dividers[i+1]-1]
+              write(f,str)
+            end
+          end
+        end
+      end
+
+    end
+  end
+  return _files
+
+end
