@@ -50,8 +50,18 @@ begin
 	_lat,_lon,_alt=unique.((df.lat,df.lon,df.alt));
 	(_lon_min,_lon_max)=extrema(df.lon)
 	df
-	val_plot=names(df[:,Not(:lon,:lat,:alt,:lon_folder)])
+	
 end
+
+# ╔═╡ 8fb3b1b8-d0ed-45f9-883b-db15e62596bb
+Pkg.add("GeoMakie")
+
+# ╔═╡ e1de2c8e-7aa2-4043-9ee1-629aab06414e
+Pkg.add("ImageFiltering")
+
+# ╔═╡ 8d049e9e-08fe-4422-9921-1a0f7759d18c
+val_plot=names(df[:,Not(:lon,:lat,:alt,:lon_folder)])
+
 
 # ╔═╡ 0da23ae1-b5b9-4a06-913a-eba588452bb1
 md"""
@@ -64,9 +74,9 @@ md"""
 # Range of Interest
 1. Latitude Minimum $(@bind _lat_min PlutoUI.Select(_lat,default=_lat[1]))
 1. Latitude Maximum $(@bind _lat_max PlutoUI.Select(_lat,default=_lat[end-1]))
-1. Altitude Minimum $(@bind _alt_min PlutoUI.Select(_alt,default=_alt[1]))
-1. Altitude Maximum $(@bind _alt_max PlutoUI.Select(_alt,default=_alt[50]))
-1. File $(@bind _info PlutoUI.Select(val_plot,default="vash_8_prof"))
+1. Altitude Minimum $(@bind _alt_min PlutoUI.Select(_alt,default=_alt[21]))
+1. Altitude Maximum $(@bind _alt_max PlutoUI.Select(_alt,default=_alt[end]))
+1. File $(@bind _info PlutoUI.Select(val_plot))
 """
 
 # ╔═╡ 9a95bae7-ede0-4766-8097-b63632d639cd
@@ -74,7 +84,10 @@ begin
 	df_filtered=df[(_lat_min.<=df.lat.<_lat_max) .& (_alt_min.<=df.alt.<=_alt_max),:]
 	#sort!(df_filtered,[:alt,:lat]);
 	df_filtered[:,[:lat,:lon,:alt,Symbol(_info)]]
-	
+end
+
+# ╔═╡ c79e1274-9de4-4102-9dd7-94e0422e9187
+begin
 	__lat=ustrip.(df_filtered.lat)
 	__lon=ustrip.(df_filtered.lon)
 	__alt=df_filtered.alt
@@ -90,11 +103,21 @@ begin
 	__lat1=unique(__lat1)	
 	__val1=copy(__val);
 	__val1.=(__val1.-minimum(__val1))./(maximum(__val1)-minimum(__val1));
-	
+end
+
+# ╔═╡ 9fbd0b1a-5f5a-406b-b7ef-73633ecbbc1e
+begin
 	points=Matrix([hcat(__lat[:]) hcat(__lon[:])  ustrip.(hcat(__alt1[:]))]');
 	samples=__val1[:];
+end
+
+# ╔═╡ 48eb9f7a-c062-4b38-a7bc-1ee2572d5283
+begin
 	itp=interpolate(NearestNeighbor(),points,samples)
-	
+end
+
+# ╔═╡ ec07b2c4-4882-4318-b1e3-2986497e9e8f
+begin
 	range_lat=extrema(__lat)
 	range_lon=extrema(__lon)
 	range_lat=(35.0,45.0)
@@ -195,6 +218,7 @@ let
 	xlabel="Latitude °",
 	ylabel="Longitude °",
 	zlabel="Altitude km",
+	azimuth=-1/6*pi,
 	aspect=:data)
 	
 
@@ -272,10 +296,17 @@ let
 end
 
 # ╔═╡ Cell order:
-# ╟─f1dacc60-8be3-11ef-2407-d5dedc774620
-# ╟─0da23ae1-b5b9-4a06-913a-eba588452bb1
+# ╠═f1dacc60-8be3-11ef-2407-d5dedc774620
+# ╟─8fb3b1b8-d0ed-45f9-883b-db15e62596bb
+# ╟─8d049e9e-08fe-4422-9921-1a0f7759d18c
+# ╠═0da23ae1-b5b9-4a06-913a-eba588452bb1
 # ╟─d4be1fab-5a6a-44c0-8348-d19cf0dabb8c
-# ╟─9a95bae7-ede0-4766-8097-b63632d639cd
-# ╟─7d9f5e20-9c3e-4df0-8703-a5092df4f36b
+# ╠═9a95bae7-ede0-4766-8097-b63632d639cd
+# ╟─ebee726a-f5ed-4bf9-9226-22923f9e28dd
+# ╟─c79e1274-9de4-4102-9dd7-94e0422e9187
+# ╠═9fbd0b1a-5f5a-406b-b7ef-73633ecbbc1e
+# ╠═48eb9f7a-c062-4b38-a7bc-1ee2572d5283
+# ╠═ec07b2c4-4882-4318-b1e3-2986497e9e8f
+# ╠═7d9f5e20-9c3e-4df0-8703-a5092df4f36b
 # ╠═2027d64b-8140-4155-878b-f4ae0aebbcc7
 # ╠═10eab0ea-4fbb-4253-85c7-76c6ec9753c7
