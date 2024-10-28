@@ -1,0 +1,98 @@
+name: CI
+on:
+  # call every time I push on the master branch for any tag
+  push:
+    branches:
+      - master
+    tags: ['*']
+  # call at every pull request
+  pull_request:
+  # call at every manual dispatch
+  workflow_dispatch:
+# cancel intermediate builds to avoid redundant runs
+concurrency:
+  # Skip intermediate builds: always.
+  # Cancel intermediate builds: only if it is a pull request build.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+# The jobs to execute
+jobs:
+  # run the tests
+  test:
+    # matrix
+    # version 1.19
+    # os ubuntu latest
+    # architecture x64
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
+    runs-on: ${{ matrix.os }}
+    # The maximum time in minutes that a job is allowed to run before being automatically cancelled.
+    timeout-minutes: 60
+    permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
+      actions: write
+      contents: read
+    strategy:
+      # if true, if any job in the matrix fails, all remaining job fails
+      fail-fast: false
+      # here is where the matrix is defined
+      matrix:
+        version:
+          - '1.10'
+          # I can add other versions to check compatibility
+          # - '1.09'
+          # - '1.11'
+        os:
+          - ubuntu-latest
+        arch:
+          - x64
+    steps:
+      # checkout the repository
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+  format-check:
+    name: "Format Check"
+    uses: "SciML/.github/.github/workflows/format-suggestions-on-pr.yml@v1"
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
+      contents: write
+      statuses: write
+    env: # environment variables
+      GP_TOKEN: ${{ secrets.GP_TOKEN }} # If authenticating with GitHub Actions token
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+      - uses: julia-actions/cache@v1
+      - name: Configure Git
+        run: |
+          git config --global url."https://${GP_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Install dependencies
+        env:
+          JULIA_PKG_SERVER: ""
+          JULIA_PKG_USE_CLI_GIT: true
+        run: |
+          julia --project=docs/ -e '
+          using Pkg;
+          Pkg.Registry.add("General");
+          Pkg.Registry.add(RegistrySpec(url="https://github.com/isaccnrbo/IsacRegistry.git"))
+          Pkg.develop(PackageSpec(path=pwd()));
+          @info "Instantiated"
+          Pkg.instantiate()'
+      - name: Build and deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
+        run: julia --project=docs/ docs/make.jl
+      - name: Run doctests
+        shell: julia --project=docs --color=yes {0}
+        run: |
+          using Documenter: DocMeta, doctest
