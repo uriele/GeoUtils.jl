@@ -6,7 +6,7 @@ module GeoUtils
   @reexport using DataFrames
   include("Utils.jl")
 
-  export Lat, Alt, Lon, get_data
+  export get_data,convert_to_array,fix_latitudes
   export RealNumber,isRealNumber,isNotRealNumber
   export latitude,longitude,altitude
   export unique_altitudes,unique_latitudes,unique_longitudes
@@ -187,9 +187,6 @@ module GeoUtils
     return unique(@. latitude(data[:,1]))
   end
 
-  """
-
-  """
 
 
 end

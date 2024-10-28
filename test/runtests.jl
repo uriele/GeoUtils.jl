@@ -1,6 +1,7 @@
 using GeoUtils
 using Test
 using Aqua
+using Unitful: °,km
 const alt_99= [120.0, 119.0, 118.0, 117.0, 116.0, 115.0, 114.0, 113.0, 112.0, 111.0,
   110.0, 109.0, 108.0, 107.0, 106.0, 105.0, 104.0, 103.0, 102.0, 101.0, 100.0, 99.0, 98.0,
   97.0, 96.0, 95.0, 94.0, 93.0, 92.0, 91.0, 90.0, 89.0, 88.0, 87.0, 86.0, 85.0, 84.0,
@@ -14,27 +15,59 @@ const alt_99= [120.0, 119.0, 118.0, 117.0, 116.0, 115.0, 114.0, 113.0, 112.0, 11
   2.24559, 1.93902, 1.66020, 1.41141,1.19548, 1.01039, 0.85022, 0.70959, 0.58788, 0.48020,
   0.38196, 0.29295, 0.21291, 0.14163, 0.07936, 0.00000];
 # Do this test only if the data folder is present in the root directory
-if isdir("data")
+
+filedir="../data"
+if isdir(filedir)
   @testset "Test utils on data" begin
     @testset "Test all_files_are_same" begin
-      @test GeoUtils.all_files_are_same("data","in_lat.dat")==true
-      @test GeoUtils.all_files_are_same("data","in_alt.dat")==true
-      @test GeoUtils.all_files_are_same("data","in_lon.dat")==false
+      @test GeoUtils.all_files_are_same(filedir,"in_lat.dat")==true
+      @test GeoUtils.all_files_are_same(filedir,"in_alt.dat")==true
+      @test GeoUtils.all_files_are_same(filedir,"in_lon.dat")==false
     end
 
     @testset "Test convert_to_array" begin
-      @test GeoUtils.convert_to_array("data/99/in_alt.dat") == alt_99
+      @test GeoUtils.convert_to_array("$(filedir)/99/in_alt.dat",16) == alt_99
     end
   end
+end
+
+@testset "Test utility functions" begin
+  _lat,_lon,_alt= 1°,1°,10km
+  _latlon=LatLon(_lat,_lon)
+  _latlonalt=LatLonAlt(_lat,_lon,_alt)
+  _geocentriclatlon=GeocentricLatLon(_lat,_lon)
+  _geocentriclatlonalt=GeocentricLatLonAlt(_lat,_lon,_alt)
+
+  @test latitude(_latlon)==_lat
+  @test longitude(_latlon)==_lon
+  @test latitude(_latlonalt)==_lat
+  @test longitude(_latlonalt)==_lon
+  @test altitude(_latlonalt)==_alt
+  @test latitude(_geocentriclatlon)==_lat
+  @test longitude(_geocentriclatlon)==_lon
+  @test latitude(_geocentriclatlonalt)==_lat
+  @test longitude(_geocentriclatlonalt)==_lon
+  @test altitude(_geocentriclatlonalt)==_alt
+
+  @test_throws MethodError altitude(_latlon)
+  @test_throws MethodError altitude(_geocentriclatlon)
+
+
 end
 
 
 
 @testset "GeoUtils.jl" begin
   @testset "Code quality (Aqua.jl)" begin
-    Aqua.test_ambiguities(GeoUtils)
-    Aqua.test_unbound_args(GeoUtils)
-    Aqua.test_undefined_exports(GeoUtils)
+    @testset "Test ambiguities" begin
+      Aqua.test_ambiguities(GeoUtils)
+    end
+    @testset "Test unbound args" begin
+      Aqua.test_unbound_args(GeoUtils)
+    end
+    @testset "Test undefined exports" begin
+      Aqua.test_undefined_exports(GeoUtils)
+    end
   end
   # Write your tests here.
 end

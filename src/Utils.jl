@@ -43,7 +43,12 @@ function all_files_are_same(directory::String,file::String="in_lat.dat")::Bool
 end
 
 
+"""
+  convert_to_array(file::String,skip=15)
 
+Convert a file to an array of Float64 values, skipping the first `skip` lines.
+
+"""
 function convert_to_array(file::String,skip=15)
   open(file, "r") do f
     data=readlines(f)[skip+1:end] |>
@@ -62,6 +67,13 @@ RealNumber(x::T) where T<:Real = RealNumber(typeof(x))
 RealNumber(x::U) where U<:Unitful.Quantity = RealNumber(Unitful.ustrip(x))
 
 isRealNumber(x) = isa(x,Number) && !isa(x,Complex)
+
+"""
+  fix_latitudes(lat::T,orbital_coordinates=true) where T<:Number
+  fix_latitudes(lat::AbstractArray{T},orbital_coordinates=true) where T<:Number
+
+Fix the latitudes so that the north pole is at the top of the raster.
+"""
 function fix_latitudes(lat::AbstractArray{T},orbital_coordinates=true) where T<:Number
   orbital_coordinates == false && return lat;
   # if the north pole is zero, we need to fix the latitudes
@@ -102,8 +114,31 @@ end
 
 @inline _conversion_latitude(x::T) where T<:Real= x <= 180 ? (90 - x) : (x -270)
 
+"""
+  latitude(x::CoordRefSystems.Geographic)::Float64
+
+Get the latitude from a `CoordRefSystems.Geographic` object.
+
+See also [`longitude`](@Ref), [`altitude`](@Ref).
+"""
 latitude(x::CoordRefSystems.Geographic)= x.lat;
+"""
+  longitude(x::CoordRefSystems.Geographic)::Float64
+
+Get the longitude from a `CoordRefSystems.Geographic` object.
+
+See also [`latitude`](@Ref), [`altitude`](@Ref).
+"""
 longitude(x::CoordRefSystems.Geographic)=x.lon;
+
+"""
+  altitude(x::CoordRefSystems.Geographic)::Float64
+
+Get the altitude from a `CoordRefSystems.Geographic` object that has an altitude.
+By default only GeocentricLatLonAlt and LatLonAlt have an altitude.
+
+See also [`latitude`](@Ref), [`longitude`](@Ref).
+"""
 altitude(x::GeocentricLatLonAlt)=x.alt;
 altitude(x::LatLonAlt)=x.alt;
 
