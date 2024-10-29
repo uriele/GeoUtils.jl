@@ -72,7 +72,7 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
-      - uses: julia-actions/cache@v1
+      - uses: julia-actions/cache@v2
       - name: Configure Git
         run: |
           git config --global url."https://${GP_TOKEN}@github.com/".insteadOf "https://github.com/"
