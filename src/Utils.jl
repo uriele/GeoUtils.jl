@@ -119,7 +119,7 @@ end
 
 Get the latitude from a `CoordRefSystems.Geographic` object.
 
-See also [`longitude`](@Ref), [`altitude`](@Ref).
+See also [`longitude`](@ref), [`altitude`](@ref).
 """
 latitude(x::CoordRefSystems.Geographic)= x.lat;
 """
@@ -127,7 +127,7 @@ latitude(x::CoordRefSystems.Geographic)= x.lat;
 
 Get the longitude from a `CoordRefSystems.Geographic` object.
 
-See also [`latitude`](@Ref), [`altitude`](@Ref).
+See also [`latitude`](@ref), [`altitude`](@ref).
 """
 longitude(x::CoordRefSystems.Geographic)=x.lon;
 
@@ -137,7 +137,7 @@ longitude(x::CoordRefSystems.Geographic)=x.lon;
 Get the altitude from a `CoordRefSystems.Geographic` object that has an altitude.
 By default only GeocentricLatLonAlt and LatLonAlt have an altitude.
 
-See also [`latitude`](@Ref), [`longitude`](@Ref).
+See also [`latitude`](@ref), [`longitude`](@ref).
 """
 altitude(x::GeocentricLatLonAlt)=x.alt;
 altitude(x::LatLonAlt)=x.alt;
