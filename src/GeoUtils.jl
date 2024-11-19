@@ -3,6 +3,7 @@ module GeoUtils
   using Unitful
   using Unitful: ustrip,unit,°,m,km
   using CoordRefSystems
+  using DataFrames
   @reexport using Unitful:°C,K,°F # temperature units
   @reexport using Unitful:Pa,atm,bar # pressure units
   @reexport using Unitful:μm,nm,cm,m,km # length units
@@ -17,6 +18,6 @@ module GeoUtils
   export AirModel
   export Mathar,Mathar1,Mathar2,Mathar3,Mathar4
   export Ciddor
-
+  export refractive_index
 
 end
