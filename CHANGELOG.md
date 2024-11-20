@@ -2,7 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## 0.3.2 - 2024-11-20
+
+### Features
+
+- feat(refractivity) add model for refractivity
+- feat(distance) add function to compute distance in 2d ray tracing
+
+## 0.3.1 - 2024-11-19
+
+## 0.3.0 - 2024-11-19
+
+### Features
+
+- feat(atmosphere model) add refractive index model
+
+### Signed-off-by
+
+- dependabot[bot] <support@github.com>
+
+## 0.2.0 - 2024-10-28
+
+### Features
+
+- updated workflow
+
+## 0.1.2 - 2024-10-28
 
 ### Features
 
