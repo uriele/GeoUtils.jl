@@ -2,7 +2,7 @@
 
 julia_version = "1.10.5"
 manifest_format = "2.0"
-project_hash = "252a93175b12698024a8012b5385538767bd9b70"
+project_hash = "cf2096d884a1177c40269621b76eae08084eb231"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -765,6 +765,11 @@ git-tree-sha1 = "401e4f3f30f43af2c8478fc008da50096ea5240f"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "8.3.1+0"
 
+[[deps.HashArrayMappedTries]]
+git-tree-sha1 = "2eaa69a7cab70a52b9687c8bf950a5a93ec895ae"
+uuid = "076d061b-32b6-4027-95e0-9a2c6f6d7e74"
+version = "0.2.0"
+
 [[deps.Hwloc_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "dd3b49277ec2bb2c6b94eb1604d4d0616016f7a6"
@@ -936,6 +941,18 @@ git-tree-sha1 = "630b497eafcc20001bba38a4651b327dcfc491d2"
 uuid = "92d709cd-6900-40b7-9082-c6be49f344b6"
 version = "0.2.2"
 
+[[deps.IsacBinaryReader]]
+deps = ["OrderedCollections"]
+git-tree-sha1 = "888d956fbf348ae1e04d892bf33dcfebc0a3e62f"
+uuid = "a2b3d639-5716-4ad9-b4c6-7c6b6078917d"
+version = "0.12.1"
+
+[[deps.IsacFileReader]]
+deps = ["CoordRefSystems", "DataFrames", "Dates", "IsacBinaryReader", "Lazy", "Mmap", "NetCDF", "OrderedCollections", "Printf", "Unitful", "UnitfulData", "XML"]
+git-tree-sha1 = "75c837ee1328ed365bc2b0dcf4a6b6152c531e00"
+uuid = "82dd0fe1-4e75-413c-9a72-18f382ba1d2e"
+version = "1.3.0"
+
 [[deps.Isoband]]
 deps = ["isoband_jll"]
 git-tree-sha1 = "f9b6d97355599074dc867318950adaa6f9946137"
@@ -1043,6 +1060,12 @@ version = "2.10.2+1"
 git-tree-sha1 = "dda21b8cbd6a6c40d9d02a73230f9d70fed6918c"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 version = "1.4.0"
+
+[[deps.Lazy]]
+deps = ["MacroTools"]
+git-tree-sha1 = "1370f8202dac30758f3c345f9909b97f53d87d3f"
+uuid = "50d2b5c4-7a5e-59d5-8109-a42b560f39c0"
+version = "0.15.1"
 
 [[deps.LazyArtifacts]]
 deps = ["Artifacts", "Pkg"]
@@ -1302,6 +1325,12 @@ deps = ["Distances", "StaticArrays"]
 git-tree-sha1 = "3cebfc94a0754cc329ebc3bab1e6c89621e791ad"
 uuid = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
 version = "0.4.20"
+
+[[deps.NetCDF]]
+deps = ["DiskArrays", "NetCDF_jll"]
+git-tree-sha1 = "243a8a229daaa040d3966f2e3e076c25ce142289"
+uuid = "30363a11-5582-574a-97bb-aa9a979735b9"
+version = "0.12.0"
 
 [[deps.NetCDF_jll]]
 deps = ["Artifacts", "Blosc_jll", "Bzip2_jll", "HDF5_jll", "JLLWrappers", "LazyArtifacts", "LibCURL_jll", "Libdl", "MPICH_jll", "MPIPreferences", "MPItrampoline_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "TOML", "XML2_jll", "Zlib_jll", "Zstd_jll", "libzip_jll"]
@@ -1665,6 +1694,12 @@ git-tree-sha1 = "0d642a08199bbeccd874b33fe3a1b699d345ca79"
 uuid = "3f865c0f-6dca-5f4d-999b-29fe1e7e3c92"
 version = "0.3.6"
 
+[[deps.ScopedValues]]
+deps = ["HashArrayMappedTries", "Logging"]
+git-tree-sha1 = "eef2fbac9538ee6cc60ee1489f028d2f8a1a5249"
+uuid = "7e506255-f358-4e82-b7e4-beb19740aa63"
+version = "1.2.1"
+
 [[deps.Scratch]]
 deps = ["Dates"]
 git-tree-sha1 = "3bac05bc7e74a75fd9cba4295cde4045d9fe2386"
@@ -1962,6 +1997,12 @@ version = "1.21.0"
     ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
     InverseFunctions = "3587e190-3f89-42d0-90ee-14403ec27112"
 
+[[deps.UnitfulData]]
+deps = ["Unitful"]
+git-tree-sha1 = "801ea94a33134590d51f2ebca50cbaa8f7ed4e70"
+uuid = "479269fd-87c4-43d6-a395-02aad47d928b"
+version = "0.6.4"
+
 [[deps.WGLMakie]]
 deps = ["Bonito", "Colors", "FileIO", "FreeTypeAbstraction", "GeometryBasics", "Hyperscript", "LinearAlgebra", "Makie", "Observables", "PNGFiles", "PrecompileTools", "RelocatableFolders", "ShaderAbstractions", "StaticArrays"]
 git-tree-sha1 = "6ec8bb76cd7c5414dd193b86de8f9ec4b48c6621"
@@ -1997,6 +2038,12 @@ deps = ["Artifacts", "Dates", "EzXML", "Printf", "Tables", "ZipArchives", "ZipFi
 git-tree-sha1 = "7fca49e6dbb35b7b7471956c2a9d3d921360a00f"
 uuid = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
 version = "0.10.4"
+
+[[deps.XML]]
+deps = ["Mmap", "OrderedCollections"]
+git-tree-sha1 = "360c178fdee6816bcc9d436c6f324d582e84f1d1"
+uuid = "72c71f33-b9b6-44de-8c94-c961784809e2"
+version = "0.3.4"
 
 [[deps.XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Zlib_jll"]
