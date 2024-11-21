@@ -61,7 +61,7 @@ struct Ellipsoid{T<:IEEEFloat}
 
   @inline function Ellipsoid(a::T,b::T) where T
     radius=Vec2{T}(a,b)
-    unscale=LinearMap(SDiagonal(radius...))
+    unscale=LinearMap(SDiagonal(radius))
     scale=inv(unscale)
     return new{T}(radius,scale,unscale)
   end

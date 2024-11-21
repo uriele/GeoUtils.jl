@@ -9,7 +9,7 @@ module GeoUtils
   using IsacBinaryReader
   using IsacFileReader
   using StaticArrays
-  using LinearAlgebra: dot,qr
+  using LinearAlgebra: dot,qr,Diagonal
   using CoordinateTransformations: LinearMap
   using Core.Intrinsics: sqrt_llvm
   using ScopedValues
