@@ -35,7 +35,7 @@ const Vec3F32 = Vec3{Float32}
 
 const Vec2F32 = Vec2{Float32}
 
-SDiagonal(v::Vec2{T}) where T = Diagonal(v...)
+SDiagonal(v::Vec2{T}) where T = Diagonal(SVector(v...))
 
 struct Ray2D{T<:IEEEFloat}
   origin::Vec2{T}
