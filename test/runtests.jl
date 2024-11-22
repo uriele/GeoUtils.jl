@@ -2,6 +2,7 @@ using GeoUtils
 using Test
 using Aqua
 using Unitful: °,km
+using CoordRefSystems
 const alt_99= [120.0, 119.0, 118.0, 117.0, 116.0, 115.0, 114.0, 113.0, 112.0, 111.0,
   110.0, 109.0, 108.0, 107.0, 106.0, 105.0, 104.0, 103.0, 102.0, 101.0, 100.0, 99.0, 98.0,
   97.0, 96.0, 95.0, 94.0, 93.0, 92.0, 91.0, 90.0, 89.0, 88.0, 87.0, 86.0, 85.0, 84.0,
@@ -30,6 +31,8 @@ if isdir(filedir)
     end
   end
 end
+
+include("test_orbit.jl")
 
 @testset "Test utility functions" begin
   _lat,_lon,_alt= 1°,1°,10km

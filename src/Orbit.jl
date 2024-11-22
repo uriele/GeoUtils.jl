@@ -23,7 +23,9 @@ const Vec3{T} = SVector{3,T}
 
 const Vec2{T} = NTuple{2,T}
 
-const Vec2(x::T,y::T) where T=Vec2{T}(x,x)
+const Vec2(x::T,y::T=T(0)) where T<:Number=Vec2{T}(x,y)
+const Vec3(x::T,y::T=T(0),z::T=T(0)) where T<:Number=Vec3{T}(x,y,z)
+
 
 Vec2{T}(x::T,y::T) where T = NTuple{2,T}([x,y])
 
@@ -42,6 +44,7 @@ struct Ray2D{T<:IEEEFloat}
   direction::Vec2{T}
 
   @inline function Ray2D(origin::Vec2{T},direction::Vec2{T}) where T
+    _hypothenuse(direction)==0 && throw(ArgumentError("Direction cannot be zero"))
     return new{T}(origin,_normalize(direction))
   end
 end
@@ -56,8 +59,8 @@ struct Ellipsoid{T<:IEEEFloat}
   # The map is assumed to be centered at the origin so I do not need to store the center
   # and the affine translation
   radius::Vec2{T}
-  scale ::LinearMap{T}
-  unscale::LinearMap{T}
+  scale ::LinearMap
+  unscale::LinearMap
 
   @inline function Ellipsoid(a::T,b::T) where T
     radius=Vec2{T}(a,b)
@@ -103,11 +106,13 @@ Calculate the distance from a segment AB to a segment CD
 """
 function distance_from_segment(A::Vec2{T},B::Vec2{T},C::Vec2{T},D::Vec2{T})::T where T
   # find intersection between segments AB,CD
+  # Assume unit ray
   # A+t*(B-A) = p = C+s*(D-C)
   # [B-A  C-D]*[t;s]=[C-A]
+  #@info "A=$A B=$B C=$C D=$D"
   M=[vcat((B.-A)...) vcat((C.-D)...)];
   y=[(C.-A)...];
-  @info "A=$A y=$y"
+  #@info "M=$M y=$y"
   _,R=qr([M y]);
   τ = atol(T);
   # Check L1 norm of the residual
@@ -118,7 +123,27 @@ function distance_from_segment(A::Vec2{T},B::Vec2{T},C::Vec2{T},D::Vec2{T})::T w
   # note: if it's collinear we will need to match the
   # fitting with the ellipse, so for our purposes collinear
   # is not intersecting
-  ((r>=2).*(M\y))[1] |> x-> (x>=0 && x<=1) ? x : T(Inf)
+  ((r>=2) && (M\y))[1] |> x-> (0<x<=1) ? x : T(Inf)
 end
 
 distance_from_segment(ray::Ray2D{T},C::Vec2{T},D::Vec2{T}) where T = distance_from_segment(ray(0),ray(1),C,D)
+
+ function distance_from_radius(origin::Vec2{T},direction::Vec2{T},angle)::T where T
+  sinθ= sin(angle)
+  cosθ= cos(angle)
+  N=origin[1]*sinθ-origin[2]*cosθ
+  D=-direction[1]*sinθ+direction[2]*cosθ
+  reduce(min,filter(x->x>0,[N/D]);init=T(Inf))
+end
+
+function distance_from_radius_new(origin::Vec2{T},direction::Vec2{T},angle)::T where T
+  sinθ= sin(angle)
+  cosθ= cos(angle)
+  N=origin[1]*sinθ-origin[2]*cosθ
+  D=-direction[1]*sinθ+direction[2]*cosθ
+  _distance=N/D
+  #reduce(min,filter(x->x>=0,[N/D]);init=T(Inf))
+  _distance > 0 ? _distance : T(Inf)
+end
+distance_from_radius(ray::Ray2D{T},angle::T) where T = distance_from_radius(ray.origin,ray.direction,angle)
+distance_from_radius_new(ray::Ray2D{T},angle::T) where T = distance_from_radius(ray.origin,ray.direction,angle)

@@ -46,22 +46,22 @@ Current availeble models for air are:
 [^6]: https://refractiveindex.info/?shelf=main&book=Air&page=Peck
 """
 function refractive_index(model::AirModel=Ciddor();
-    temperature::Union{T1,Unitful.Temperature{T1}}=15.0°C,
-    pressure::Union{T3,Unitful.Pressure{T2}}=101325.0Pa,
-    wavelength::Union{T3,Unitful.Length{T3}}=0.532μm,
-    humidity=0.0,
-    CO2ppm=450) where {T1<:IEEEFloat,T2<:IEEEFloat,T3<:IEEEFloat}
+  temperature::Union{T1,Unitful.Temperature{T1}}=15.0°C,
+  pressure::Union{T2,Unitful.Pressure{T2}}=101325.0Pa,
+  wavelength::Union{T3,Unitful.Length{T3}}=0.532μm,
+  humidity::T4=0.0,
+  CO2ppm::U=450) where {T1<:IEEEFloat,T2<:IEEEFloat,T3<:IEEEFloat,T4,U}
 
-    # Convert all inputs to the correct units
-    temperature =_convertto(temperature,°C)
-    pressure =_convertto(pressure,Pa)
-    wavelength =_convertto(wavelength,μm)
-    (temperature,pressure,wavelength)=promote(temperature,pressure,wavelength)
-    # Find the correct units for the output
-    T=typeof(temperature)
-    humidity=convert(T,humidity)
-    CO2ppm=convert(T,CO2ppm)
-    _refractive_index(model,temperature,pressure,wavelength,humidity,CO2ppm)
+  # Convert all inputs to the correct units
+  temperature =_convertto(temperature,°C)
+  pressure =_convertto(pressure,Pa)
+  wavelength =_convertto(wavelength,μm)
+  (temperature,pressure,wavelength)=promote(temperature,pressure,wavelength)
+  # Find the correct units for the output
+  T=typeof(temperature)
+  humidity=convert(T,humidity)
+  CO2ppm=convert(T,CO2ppm)
+  _refractive_index(model,temperature,pressure,wavelength,humidity,CO2ppm)
 end
 
 @inline _convertto(x,_unit)=dimension(x)==Unitful.NoDims ? x : ustrip.(uconvert(_unit,x))

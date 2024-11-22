@@ -33,7 +33,7 @@ module GeoUtils
   export Mathar,Mathar1,Mathar2,Mathar3,Mathar4
   export Ciddor
   export refractive_index
-  export Vec2,Vec3,Vec4
+  export Vec2,Vec3
   export Ray2D,Ellipsoid
-  export distance_from_unit_circle,distance_from_segment
+  export distance_from_unit_circle,distance_from_segment,distance_from_radius,distance_from_radius_new
 end
