@@ -22,7 +22,7 @@ trim = true
 # parse the commits based on https://www.conventionalcommits.org
 conventional_commits = true
 # filter out the commits that are not conventional
-filter_unconventional = true
+filter_unconventional = false
 # process each line of a commit as an individual commit
 split_commits = true
 # regex for parsing and grouping commits
@@ -39,9 +39,9 @@ commit_parsers = [
     { body = ".*security", group = "Security" },
 ]
 # filter out the commits that are not matched by commit parsers
-filter_commits = true
+filter_commits = false
 # sort the tags topologically
-topo_order = false
+topo_order = true
 # sort the commits inside sections by oldest/newest order
 sort_commits = "oldest"
 limit_commits = 42
@@ -49,4 +49,4 @@ limit_commits = 42
 [bump]
 features_always_bump_minor = true
 breaking_always_bump_major = true
-initial_tag = "0.3.1"
+initial_tag = "0.1.0"
