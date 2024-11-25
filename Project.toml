@@ -1,7 +1,7 @@
 name = "GeoUtils"
 uuid = "9e7f6a50-18ad-4244-91e0-d4fb5b087add"
 authors = ["uriele <menarini.marco@gmail.com> and contributors"]
-version = "0.3.3"
+version = "0.4.0"
 
 [deps]
 AffineMaps = "2c83c9a8-abf5-4329-a0d7-deffaf474661"
