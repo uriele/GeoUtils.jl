@@ -1,4 +1,11 @@
 Changelog
+## Unreleased
+
+### Performance
+
+- add PkgBenchmark
+- add report suite
+
 ## 0.4.0 - 2024-11-25
 
 ### Bug Fixes
