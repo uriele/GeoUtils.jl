@@ -47,17 +47,17 @@ suite["distance_parallel"]["segment"]=@benchmarkable @fastmath static_parallel_s
 
 function batched_segment!(sdist,rays,C,D)
   @batch for i in 1:N
-    @inbounds sdist[i]=@inline distance_from_segment(rays[i],C,D)
+    @inbounds sdist[i]=@inline @fastmath distance_from_segment(rays[i],C,D)
   end
 end
 function batched_unit_circle!(cdist,rays)
   @batch for i in 1:N
-    @inbounds cdist[i]=@inline distance_from_unit_circle(rays[i])
+    @inbounds cdist[i]=@inline @fastmath distance_from_unit_circle(rays[i])
   end
 end
 function batched_circle_radius!(rdist,rays)
   @batch for i in 1:N
-    @inbounds rdist[i]=@inline distance_from_radius_new(rays[i],pi/4)
+    @inbounds rdist[i]=@inline @fastmath distance_from_radius_new(rays[i],pi/4)
   end
 end
 suite["distance_batched"]["unit_circle"]=@benchmarkable @fastmath batched_unit_circle!(cdist,rays)

@@ -21,13 +21,10 @@ atol(::Type{Float32}) = ATOL32[]
 
 const Vec3{T} = SVector{3,T}
 
-const Vec2{T} = NTuple{2,T}
+const Vec2{T} = SVector{2,T}
 
 const Vec2(x::T,y::T=T(0)) where T<:Number=Vec2{T}(x,y)
 const Vec3(x::T,y::T=T(0),z::T=T(0)) where T<:Number=Vec3{T}(x,y,z)
-
-
-Vec2{T}(x::T,y::T) where T = NTuple{2,T}([x,y])
 
 const Vec3F64 = Vec3{Float64}
 
@@ -37,7 +34,8 @@ const Vec3F32 = Vec3{Float32}
 
 const Vec2F32 = Vec2{Float32}
 
-SDiagonal(v::Vec2{T}) where T = Diagonal(SVector(v...))
+SDiagonal(v::Vec2{T}) where T = Diagonal(v)
+SDiagonal(v::Vec3{T}) where T = Diagonal(v)
 
 struct Ray2D{T<:IEEEFloat}
   origin::Vec2{T}
@@ -53,7 +51,7 @@ function (lm::LinearMap)(r::Ray2D{T}) where T
   return Ray2D(Vec2(lm(r.origin)...),_normalize(Vec2(lm(r.direction)...)))
 end
 
-(r::Ray2D{T})(t) where T = r.origin.+T(t).*_normalize(r.direction)
+(r::Ray2D{T})(t) where T = r.origin+T(t)*_normalize(r.direction)
 
 struct Ellipsoid{T<:IEEEFloat}
   # The map is assumed to be centered at the origin so I do not need to store the center
@@ -76,8 +74,8 @@ end
 @inline _dot(v1::Vec3{T},v2::Vec3{T}) where T = dot(v1,v2)
 
 @inline _fastquadratic(halfB::T,C::T) where T = sqrt_llvm(halfB*halfB-C)
-@inline _hypothenuse(v::Vec2{T}) where T = hypot(v[1],v[2])
-@inline _normalize(v::Vec2{T}) where T = Vec2((v./_hypothenuse(v))...)
+@inline _hypothenuse(v::Vec2{T}) where T = hypot(v.x,v.y)
+@inline _normalize(v::Vec2{T}) where T = v/_hypothenuse(v)
 
 
 """
@@ -93,7 +91,7 @@ function distance_from_unit_circle(origin::Vec2{T},direction::Vec2{T})::T where 
   halfB=-_dot(origin,direction) # projection of the origin on the direction
   μ²=halfB*halfB-C
   sqrt_llvm(μ²) |>             # use llvm intrinsic for sqrt for fast math,if negative it will return NaN
-  x -> (halfB.+[x,-x]) |>
+  x -> (halfB*ones(2)+[x,-x]) |>
   x -> reduce(min,filter(x->x>=0,x);init=T(Inf))  # filter takes advantage of the fact that NaN return false for >0 <0 or ==0
 end
 distance_from_unit_circle(ray::Ray2D{T}) where T = distance_from_unit_circle(ray.origin,_normalize(ray.direction))
@@ -110,8 +108,8 @@ function distance_from_segment(A::Vec2{T},B::Vec2{T},C::Vec2{T},D::Vec2{T})::T w
   # A+t*(B-A) = p = C+s*(D-C)
   # [B-A  C-D]*[t;s]=[C-A]
   #@info "A=$A B=$B C=$C D=$D"
-  M=[vcat((B.-A)...) vcat((C.-D)...)];
-  y=[(C.-A)...];
+  M=[(B-A) (C-D)];
+  y=(C-A);
   #@info "M=$M y=$y"
   _,R=qr([M y]);
   τ = atol(T);
@@ -131,19 +129,24 @@ distance_from_segment(ray::Ray2D{T},C::Vec2{T},D::Vec2{T}) where T = distance_fr
  function distance_from_radius(origin::Vec2{T},direction::Vec2{T},angle)::T where T
   sinθ= sin(angle)
   cosθ= cos(angle)
-  N=origin[1]*sinθ-origin[2]*cosθ
-  D=-direction[1]*sinθ+direction[2]*cosθ
+  v=[sinθ;-cosθ]
+  N=dot(origin,v)
+  D=-dot(direction,v)
+  τ=atol(T)
+  D=-dot(direction,v) |> x-> !(-τ<x<τ)*x
   reduce(min,filter(x->x>0,[N/D]);init=T(Inf))
 end
 
 function distance_from_radius_new(origin::Vec2{T},direction::Vec2{T},angle)::T where T
   sinθ= sin(angle)
   cosθ= cos(angle)
-  N=origin[1]*sinθ-origin[2]*cosθ
-  D=-direction[1]*sinθ+direction[2]*cosθ
+  v=[sinθ;-cosθ]
+  N=dot(origin,v)
+  τ=atol(T)
+  D=-dot(direction,v) |> x-> !(-τ<x<τ)*x
   _distance=N/D
   #reduce(min,filter(x->x>=0,[N/D]);init=T(Inf))
   _distance > 0 ? _distance : T(Inf)
 end
-distance_from_radius(ray::Ray2D{T},angle::T) where T = distance_from_radius(ray.origin,ray.direction,angle)
-distance_from_radius_new(ray::Ray2D{T},angle::T) where T = distance_from_radius(ray.origin,ray.direction,angle)
+distance_from_radius(ray::Ray2D{T},angle) where T = distance_from_radius(ray.origin,ray.direction,angle)
+distance_from_radius_new(ray::Ray2D{T},angle) where T = distance_from_radius(ray.origin,ray.direction,angle)
