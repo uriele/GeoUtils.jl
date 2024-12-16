@@ -173,3 +173,65 @@ function parse_vrm_profile(directory::String,file::String)
   return _files
 
 end
+
+
+"""
+  h20_ppmv_to_rh(ppmv::T; pressure::T=101325.0,temperature::T=15.0) where T<:IEEEFloat
+
+Convert the water vapor concentration in parts per million by volume to relative humidity[^1].
+Default values for pressure and temperature are 101325 Pa and 15°C respectively.
+
+  RH=1000× Pd(H₂0)/Ps(H₂0)
+
+where Pd(H₂0) is the partial pressure of water vapor and Ps(H₂0) is the saturation pressure
+of water vapor in the mixture at the given temperature.
+
+# inputs
+- `ppmv::T`: water vapor concentration in parts per million by volume
+- `pressure::T=101325.0`: pressure in Pascal
+- `temperature::T=15.0`: temperature in °C
+# outputs
+- `RH::T`: relative humidity in %
+
+[^1]: Huang, J. (2018). A simple accurate formula for calculating saturation vapor pressure of water and ice. Journal of Applied Meteorology and Climatology, 57(6), 1265-1272.
+"""
+function h20_ppmv_to_rh(ppmv::T; pressure::T=101325.0,temperature::T=15.0)::T where T<:IEEEFloat
+pressure_h20=ppmv*pressure*PPMV_TO_PARTS
+
+saturated_pressure_h20= (temperature>0)*_saturated_pressure_water(pressure,temperature)+
+                        (temperature<=0)*_saturated_pressure_ice(pressure,temperature)
+return min(100*pressure_h20/saturated_pressure_h20,100)
+end
+const PPMV_TO_PARTS=1e-6
+const A_HUNG_WATER= 34.494
+const B_HUNG_WATER= 4924.99
+const C_HUNG_WATER= 237.1
+const D_HUNG_WATER= 105.0
+const E_HUNG_WATER= 1.5
+const F_HUNG_WATER= 1.00071
+const P_HUNG_WATER= 0.000000045
+
+const A_HUNG_ICE= 43.497
+const B_HUNG_ICE= 6545.8
+const C_HUNG_ICE= 278.0
+const D_HUNG_ICE= 868.0
+const E_HUNG_ICE= 2.0
+const F_HUNG_ICE= 0.99882
+const P_HUNG_ICE= 0.00000008
+
+for species in (:water,:ice)
+  lower_species_str=String(species)
+  upper_species_str=uppercase(lower_species_str)
+  upper_species_symbol=Symbol(upper_species_str)
+  fn = Symbol("_saturated_pressure_"*lower_species_str)
+  hung_const_sym=Array{Symbol,1}(undef,7)
+  for (i,hung_const) in enumerate(("A","B","C","D","E","F","P"))
+    hung_const_sym[i]=Symbol(hung_const*"_HUNG_"*upper_species_str)
+  end
+
+
+  @eval @inline function $fn(pressure::T,temperature::T)::T where T<:IEEEFloat
+    $species=exp($(hung_const_sym[1])-($(hung_const_sym[2])/(temperature+$(hung_const_sym[3]))))/(temperature+$(hung_const_sym[4]))^$(hung_const_sym[5])
+    return $species*$(hung_const_sym[6])*exp($(hung_const_sym[7])*pressure)
+  end
+end

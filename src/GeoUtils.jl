@@ -36,4 +36,5 @@ module GeoUtils
   export Vec2,Vec3
   export Ray2D,Ellipsoid
   export distance_from_unit_circle,distance_from_segment,distance_from_radius,distance_from_radius_new
+  export h20_ppmv_to_rh
 end
