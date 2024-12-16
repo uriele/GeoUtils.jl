@@ -5,3 +5,5 @@
 data/*
 presentation_bianca*
 benchmark_results/*.md
+*.dat 
+/data
