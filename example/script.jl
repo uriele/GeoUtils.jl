@@ -264,3 +264,62 @@ C
 A
 
 ((B/A)^2-4*C/A)
+
+
+
+
+@kwdef struct WedgeAtm{T}
+  center::Point2f=Point2f(0.,0.)
+  h₁::T=0.0
+  h₂::T=1.0
+  θ₁::T=0.0
+  θ₂::T=90.0
+  a ::T=1.0
+  b ::T=0.9
+end
+
+@inline _ellipse_point(a,b,h,θ)=Point2f((a+h)*cosd(θ),(b+h)*sind(θ))
+function mycoordinates(w::WedgeAtm{T},nvertex=60) where T
+  p=Point2f[]
+
+  for θ in LinRange(w.θ₁,w.θ₂,nvertex)
+    push!(p,_ellipse_point(w.a,w.b,w.h₁,θ))
+  end
+  for θ in LinRange(w.θ₂,w.θ₁,nvertex)
+    push!(p,_ellipse_point(w.a,w.b,w.h₂,θ))
+  end
+  return p
+end
+
+
+using Makie,WGLMakie
+
+fig=Figure(aspect_ratio=1)
+θ=LinRange(0,10,10)
+
+h=LinRange(0,50,50)
+
+
+dh=diff(h)[1]./68765
+dθ=diff(θ)[1]
+ax=Axis(fig[1,1],xlabel="x (km)",ylabel="y (km)")
+pp=Vector{Point2f}[]
+[push!(pp,mycoordinates(WedgeAtm(b=0.5,θ₁=θ,θ₂=θ+dθ,h₁=h,h₂=h+dh))) for h in h./68765,θ in θ];
+
+
+temp=[_t(h,θ) for h in h,θ in θ ]
+pres=[_p(h,_t(h,θ)) for h in h,θ in θ ]
+ref=[refractive_index(temperature=_t(h,θ),pressure=_p(h,_t(h,θ))) for h in h,θ in θ ]
+
+poly(pp,color=pres[:])
+poly(pp,color=temp[:])
+fig=Figure(aspect_ratio=1)
+ax,p=poly(fig[1,1],pp,color=ref[:])
+Colorbar(fig[1,2],p)
+
+fig=Figure(aspect_ratio=1)
+ax,p=poly(fig[1,1],pp,color=temp[:])
+Colorbar(fig[1,2],p)
+lines(fig[2,1], h, temp[:,div(end,2)],color=:black)
+lines(fig[3,1], h, pres[:,div(end,2)],color=:black)
+lines(fig[4,1], h, ref[:,div(end,2)],color=:black)
