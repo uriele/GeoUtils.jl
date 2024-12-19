@@ -44,17 +44,20 @@ end
 
 
 """
-  convert_to_array(file::String,skip=15)
+  convert_to_array([::Type{T}=Float64],file::String;skip=15,sink::A=Array{T})::A where {A}
 
 Convert a file to an array of Float64 values, skipping the first `skip` lines.
 
 """
-function convert_to_array(file::String,skip=15)
+function convert_to_array(Float64::Type{T},file::String;skip=15,sink::A=Array) where {T, A}
   open(file, "r") do f
     data=readlines(f)[skip+1:end] |>
-    x-> join(x," ") |> x-> String.(split(x)) |> x-> parse.(Float64,x)
+    x-> join(x," ") |> x-> String.(split(x)) |> x-> parse.(T,x) |> sink
   end
 end
+
+convert_to_array(file::String;kwargs...)=convert_to_array(Float64,file;kwargs...)
+
 
 abstract type RealNumber end
 struct isRealNumber end

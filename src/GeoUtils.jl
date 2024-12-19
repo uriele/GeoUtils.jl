@@ -38,5 +38,5 @@ module GeoUtils
   export Ray2D,Ellipsoid
   export distance_from_unit_circle,distance_from_segment,distance_from_radius,distance_from_radius_new
   export h20_ppmv_to_rh
-  export SemiCircularMatrix
+  export SemiCircularMatrix,SemiCircularArray,SemiCircularVector
 end

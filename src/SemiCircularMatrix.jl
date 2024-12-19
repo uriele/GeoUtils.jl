@@ -182,7 +182,7 @@ function Base.insert!(arr::SemiCircularVector, i::Integer, item)
   return arr
 end
 
-
+#=
 N=20
 M=36
 
@@ -193,3 +193,4 @@ data=Matrix{Float64}(undef,N,M)
 
 
 OpticalInfo[1,1]=1.0
+=#
