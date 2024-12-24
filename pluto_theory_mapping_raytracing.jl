@@ -58,7 +58,7 @@ x \\ y
 \quad
 \hat{t}(x,y)=
 \begin{bmatrix}
-0 && 1\\ 
+0 && 1\\
 1 && 0
 \end{bmatrix} M_{E\rightarrow C}
 \begin{bmatrix}
@@ -70,25 +70,25 @@ x \\ y
 """
 
 # ╔═╡ 0147027b-8f16-40dd-8763-942cd7da893d
-let 
+let
 	A= [0  0 1;0 1 0;1 0 0];
 	B= [2 0 0;0 1 0;0 0 3];
-	@info A
-	@info A'
-	@info B
-	@info B'
-	@info A*B
-	@info B*A
-	@info (A*B)'
-	@info A'*B'
+	@ A
+	@ A'
+	@ B
+	@ B'
+	@ A*B
+	@ B*A
+	@ (A*B)'
+	@ A'*B'
 
 	A= [0  1;1 0];
 	B= [2;0];
-	@info A
-	@info A'
-	@info B
-	@info B'
-	@info A*B
+	@ A
+	@ A'
+	@ B
+	@ B'
+	@ A*B
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001

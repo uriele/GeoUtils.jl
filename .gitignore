@@ -7,3 +7,4 @@ presentation_bianca*
 benchmark_results/*.md
 *.dat 
 /data
+/data_atm/DES_TEST-MW1

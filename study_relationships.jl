@@ -34,7 +34,7 @@ begin
 
 	_rad1(t;theta=0,a=a,b=b)=(cosd(theta), sind(theta)).+t.*direc(theta,a,b)
 	direc(theta,a,b)= (cosd(theta), sind(theta))./(1/a^2,1/b^2) |> x-> x./hypot(x...)
-	@info _rad1(1)
+	@ _rad1(1)
 #=
 	(a²b²+2a²bh+a²h²)+
 	(2ab²h+2abh²+2ah³)+
@@ -47,12 +47,12 @@ begin
 		2(bhx²+ahy²)+
 		(h²x²+h²y²)
 
-	
+
     (a²b²)=b²x+a²y
     (h²h²)=h²x+h²y
 	(2abh²+ab²h+a²bh+)=2bh*x+2ah*y
-	
-	
+
+
 	a(x,y)=hypot(x/a,y/a)
 	b(x,y)=
 =#
@@ -79,8 +79,8 @@ begin
 	scale_top=scale_top[2:end]
 	M=[AtmosphereMesh(scale_top...,scale_bottom...,ang_left,ang_right)	for (scale_top,scale_bottom) in zip(scale_top,scale_bottom), (ang_left,ang_right) in zip(ang_left,ang_right)] |> StructArray
 
-	
-	
+
+
 	for h in 0:5
 		l1=map(a->(_x(a,h),_y(a,h)),ang)
 		#l2=map(l->(l[1]/(a+h)*(1+h/5),l[2]/(b+h)*(1+h/5),h),l1)
@@ -93,7 +93,7 @@ begin
 		#g1=map(h->(_x(ang,h),_y(ang,h)),h1)
 		#g2=map(l->(l[1][1]/(a+l[2])*(1+l[2]),l[1][2]/(b+l[2])*(1+l[2]),l[2]),zip(g1,h1))
 		g1=[_rad1(x;theta=ang) for x in h1, ang in ang]
-			@info g1
+			@ g1
 		#g2=map(l->(l[1][1]/(a+l[2])*(1+l[2]/5),l[1][2]/(b+l[2])*(1+l[2]/5)),zip(g1,h1))
 		#g2=map(l->(_invx(l[1][1]),_invy(l[1][2]),-l[2]),zip(g1,h1))
 		g2=map(l->(_invx(l[1][1]),_invy(l[1][2])),zip(g1,h1))
@@ -116,12 +116,12 @@ let
 	N=360
 	a1=b
 	b1=a
-	s= StructArray([begin 
+	s= StructArray([begin
 			  l=hypot(cosd(ang)/a^2,sind(ang)/b^2)
 			  (cosd(ang)/a^2,sind(ang)/b^2) #./l
 	         end for ang in 0:N])
 	fig=Figure()
-	s1= StructArray([begin 
+	s1= StructArray([begin
 			  l=hypot(cosd(ang)/a1^2,sind(ang)/b1^2)
 			  (cosd(ang)/a1^2,sind(ang)/b1^2) #./l
 	         end for ang in 0:N])
@@ -131,7 +131,7 @@ let
 	#=
 	ax,lin=lines(fig[1,1],0:N,StructArrays.component(s,1),label="x′",color="blue")
 	lines!(ax,0:N,StructArrays.component(s,2),label="y′",color="red")
-	lines!(ax,0:N,[hypot(s...) for s in s],color="black",linestyle=:dash)	
+	lines!(ax,0:N,[hypot(s...) for s in s],color="black",linestyle=:dash)
 	axislegend(ax)
 =#
 	#ax3=Axis3(fig[2,1])
@@ -144,14 +144,14 @@ let
 	for h in 0:10
 		#lines!(ax13,[cosd(θ),sind(θ),hh(h,θ)) for θ in 0:N])
 		circ=[begin
-			(cosd(θ)*(a+h)/(b+h)*b/a,sind(θ)*(a+h)/(b+h)*b/a,(a/b)*((b+hh(h,θ))/(a+hh(h,θ)))) 
+			(cosd(θ)*(a+h)/(b+h)*b/a,sind(θ)*(a+h)/(b+h)*b/a,(a/b)*((b+hh(h,θ))/(a+hh(h,θ))))
 			end
 			for θ in 0:N]
 		circb=[begin
-			(cosd(θ)*(a+h)/a,sind(θ)*(b+h)/b,1) 
+			(cosd(θ)*(a+h)/a,sind(θ)*(b+h)/b,1)
 			end
 			for θ in 0:N]
-		@info begin
+		@ begin
 			cc=0
 			cc1=0
 			for i in 2:length(circ)
@@ -160,7 +160,7 @@ let
 			end
 			(cc/2/pi,cc1/2/pi)
 		end
-		@info a,b,
+		@ a,b,
 		lines!(ax13,circ)
 		lines!(ax13,circb,linestyle=:dash)
 	end
@@ -191,7 +191,7 @@ let
 	ss=StructArray((rand(1:20,4))
 	filter(x->x[1]==min(StructArrays.component(ss,1)...),ss) |>
 	x-> (StructArrays.component(x,1)[1],sum(StructArrays.component(x,2)))
-	
+
 end
 
 # ╔═╡ 948d2ecb-9c6a-4ed4-9f24-498c13b4e979
@@ -218,25 +218,25 @@ let
 	#lines!(ax2,map(θ->Tuple((mapping*Vec(_circ(θ)...))),θ))
 	ax2.title="Projected Space"
 	#lines!(ax2,map(θ->Tuple((mapping*Vec(_circ(θ;h=h)...))),θ))
-	
+
 	b′(h)=(1+h/a)/(1+h/b)
 	a′(h)=(1+h/a)/(1+h/a)
 	m1(h,θ)=[1 0 0 0;0 1 0 0 ;0 0 0 begin
 			leff²=(((1+h/a)*cosd(θ))^2+((1+h/b)*sind(θ))^2)
 			sqrt(max(0,leff²-(1+h/a)^2))
-		end; 
+		end;
 		0 0 0 0
 		]
 	m0(h)=[a′(h) 0 0;0 b′(h) 0;0 0 1] #*mapping
-	@info m0
-	@info m1(0,0)
-	@info mapping
+	@ m0
+	@ m1(0,0)
+	@ mapping
 	#lines!(ax2,map(θ->Tuple((mapping*Vec(_circ(θ;h=h)...))),θ))
 	#tt0=map(θ->Tuple(m1(0,θ)*push!(m0(0)*(mapping*Vec(_circ(θ;h=0)...)),1))[1:3],θ)
 	#tt1=map(θ->Tuple(m1(5,θ)*push!(m0(1)*(mapping*Vec(_circ(θ;h=1)...)),1))[1:3],θ)
 	#tt2=map(θ->Tuple(m1(5,θ)*push!(m0(5)*(mapping*Vec(_circ(θ;h=2)...)),1))[1:3],θ)
 
-	@info _circ(0)
+	@ _circ(0)
 
 	mm=[1/a 0;0 1/b]
 	ma(h)=[1/(1+h/a) 0;0 1/(1+h/b)]*mm
@@ -246,19 +246,19 @@ let
 	lines!(tt(1))
 	lines!(tt(2))
 	lines!(tt(3))
-	
-	#@info tt1
+
+	#@ tt1
 	#lines!(ax2,tt0)
 	#lines!(ax2,tt1)
 	#lines!(ax2,tt2)
-	
+
 	#xlims!(ax2,-1.5,1.5)
 	#ylims!(ax2,-1.5,1.5)
 	fig
-	
-	
 
-	
+
+
+
 end
 
 # ╔═╡ 74bd1cb3-2e3d-4f6b-b886-11c15fef8ec8
@@ -271,8 +271,8 @@ let
 	lines!(axx,map(h->(h,0.5*invfrac(h,h-1,a)),1:1000))
 	lines!(axx,map(h->(h,0.5*invfrac(h,h-1,b)),1:1000))
 
-	
-	
+
+
 	figure1
 end
 

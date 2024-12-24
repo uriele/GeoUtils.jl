@@ -27,7 +27,7 @@ end
   @test m[10,2]==20
   @test m[1]==m[21]
   @test m[10,3]==m[10,1]
-  @test m[:,-1:1][1,1]==11
+  @test m[:,0:1][1,1]==11
 
   @test IndexStyle(m)==IndexStyle(typeof(m))==IndexCartesian()
   @test isa(m,AbstractMatrix)

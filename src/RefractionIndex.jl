@@ -9,6 +9,7 @@ struct Mathar4 <: Mathar end
 #struct Mathar5 <: Mathar end
 struct Birch <: AirModel end
 struct Peck <: AirModel end
+struct Carlotti <: AirModel end
 
 """
   refractive_index([::AirModel=Ciddor];
@@ -68,6 +69,21 @@ end
 
 
 @inline _refractive_index(model::AirModel,T,P,λ,h,CO2)= throw(ArgumentError("$(model) not implemented yet"))
+
+
+const CARLOTTI_BASE_CONSTANT=0.000272632
+const CARLOTTI_RATIO_PRESSURE_TEMPERATURE=288.16/1013.25
+
+
+
+@inline function _refractive_index(model::C,temperature::T,pressure::T,wavelength::T,humidity::T,CO2ppm::T)::T where {T<:IEEEFloat,C<:Carlotti}
+  temperature_kelvin = ustrip(uconvert(K,temperature*°C))   # Temperature: K
+  pressure_mbar = ustrip(uconvert(u"mbar",pressure*Pa))   # Pressure: Pa
+
+  return T(1.0)+CARLOTTI_BASE_CONSTANT*(pressure_mbar/temperature_kelvin)*CARLOTTI_RATIO_PRESSURE_TEMPERATURE
+
+end
+
 
 @inline function _const_mathar(::Mathar,::Type{T}) where T<:IEEEFloat
   throw(ArgumentError("$(model) not implemented yet"))

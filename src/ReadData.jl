@@ -26,7 +26,7 @@ function get_data(path::String,Info::Vector{String}=["temp"],skip=13;initial_lat
     # get lat and alt from first file since they are the same for all files
     data_lat=GeoUtils.fix_latitudes(GeoUtils.convert_to_array(string(subdirs[1])*"/in_lat.dat"),orbital_coordinates);
     #idx_lat=sortperm(data_lat);
-    #@info idx_lats
+    #@debug idx_lats
     #data_lat=data_lat[idx_lat];
 
     data_alt=GeoUtils.convert_to_array(string(subdirs[1])*"/in_alt.dat",16);
@@ -53,7 +53,7 @@ function get_data(path::String,Info::Vector{String}=["temp"],skip=13;initial_lat
     fold=similar(data);
 
     [fold[:,i,:].=i for i in 1:lon_length]
-    @info skip
+    @debug skip
     @inbounds for (i,directory) in enumerate(subdirs)
       for (sk,info) in zip(skip,Info)
         @debug sk info
@@ -77,13 +77,13 @@ function get_data(path::String,Info::Vector{String}=["temp"],skip=13;initial_lat
 
     spatial_dimension_lat=similar(data);
     spatial_dimension_alt=similar(spatial_dimension_lat);
-    @info size(spatial_dimension_lat)
-    @info size(spatial_dimension_lon)
-    @info size(spatial_dimension_alt)
-    @info size(data)
+    @debug size(spatial_dimension_lat)
+    @debug size(spatial_dimension_lon)
+    @debug size(spatial_dimension_alt)
+    @debug size(data)
     [spatial_dimension_lat[j,i,:]=data_lat for i in 1:lon_length,j in 1:alt_length]
     [spatial_dimension_alt[:,j,i]=data_alt for i in 1:lat_length,j in 1:lon_length]
-    @info "Data dimensions: $(size(data[:]))"
+    @debug "Data dimensions: $(size(data[:]))"
     spatial_dimension_lat2,spatial_dimension_lon2= GeocentricLatLonAlt.(spatial_dimension_lat[:],spatial_dimension_lon[:],spatial_dimension_alt[:]) |>
     x-> convert.(LatLonAlt,x) |>
     x-> (latitude.(x),longitude.(x));
@@ -120,7 +120,7 @@ function get_data(path::String,Info::Vector{String}=["temp"],skip=13;initial_lat
 
     if sink==DataFrame
 
-      @info Info
+      @debug Info
       return DataFrame(
         "lat"=>spatial_dimension_lat2,
         "lon"=>spatial_dimension_lon2,

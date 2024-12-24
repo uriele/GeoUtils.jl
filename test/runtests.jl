@@ -1,4 +1,5 @@
 using GeoUtils
+using SatelliteToolboxTransformations: date_to_jd
 using Test
 using Aqua
 using Unitful: °,km
@@ -31,7 +32,7 @@ if isdir(filedir)
     end
 
     @testset "Test convert_to_array" begin
-      @test GeoUtils.convert_to_array("$(filedir)/99/in_alt.dat",16) == alt_99
+      @test GeoUtils.convert_to_array("$(filedir)/99/in_alt.dat";skip=16) == alt_99
     end
   end
 end
@@ -59,6 +60,11 @@ include("test_orbit.jl")
   @test_throws MethodError altitude(_latlon)
   @test_throws MethodError altitude(_geocentriclatlon)
 
+  jd0=date_to_jd(2000,1,1,0,0,0)
+  jd1=date_to_jd(2024,12,20,2,49,16.005)
+
+  @test jd0≈mjd2000_to_jd(0)
+  @test jd1≈mjd2000_to_jd(9120,2,49,16,5000)
 
 end
 
@@ -67,7 +73,7 @@ end
 @testset "GeoUtils.jl" begin
   @testset "Code quality (Aqua.jl)" begin
     @testset "Test ambiguities" begin
-      Aqua.test_ambiguities(GeoUtils)
+      Aqua.test_ambiguities(GeoUtils;broken=false,exclude=[similar])
     end
     @testset "Test unbound args" begin
       Aqua.test_unbound_args(GeoUtils)

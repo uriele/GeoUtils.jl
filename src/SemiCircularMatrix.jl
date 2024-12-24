@@ -129,21 +129,25 @@ end
 end
 
 @inline _similar(arr::SemiCircularArray, ::Type{T}, dims) where T = SemiCircularArray(similar(parent(arr),T,dims))
+
 @inline Base.similar(arr::SemiCircularArray, ::Type{T},  dims::Tuple{Base.DimOrInd, Vararg{Base.DimOrInd}}) where T = _similar(arr,T,dims)
 # ambiguities resolved with base
 @inline Base.similar(arr::SemiCircularArray, ::Type{T}, dims::Dims) where T = _similar(arr, T, dims)
 @inline Base.similar(arr::SemiCircularArray, ::Type{T}, dims::Tuple{Integer, Vararg{Integer}}) where T = _similar(arr, T, dims)
 @inline Base.similar(arr::SemiCircularArray, ::Type{T}, dims::Tuple{Union{Integer, Base.OneTo}, Vararg{Union{Integer, Base.OneTo}}}) where T = _similar(arr, T, dims)
+@inline Base.similar(arr::SemiCircularArray{T,N,SA}, ::Type{T}, dims::Tuple{Union{Integer, SOneTo}, Vararg{Union{Integer, SOneTo}}}) where {T,N,SA<:StaticArray} = _similar(arr, T, dims)
 
 
 @inline _similar(::Type{SemiCircularArray{T,N,A}}, dims) where {T,N,A} = SemiCircularArray{T,N}(similar(A,dims))
-@inline Base.similar(SCA::Type{SemiCircularArray{T,N,A}}, dims) where {T,N,A} = _similar(SCA,dims)
+
+@inline Base.similar(SCA::Type{SemiCircularArray{T,N,A}},  dims::Tuple{Base.DimOrInd, Vararg{Base.DimOrInd}}) where {T,N,A} = _similar(SCA,dims)
 # Ambiguity resolution with Base
 @inline Base.similar(SCA::Type{SemiCircularArray{T,N,A}}, dims::Dims) where {T,N,A} = _similar(SCA, dims)
 @inline Base.similar(SCA::Type{SemiCircularArray{T,N,A}}, dims::Tuple{Union{Integer, Base.OneTo}, Vararg{Union{Integer, Base.OneTo}}}) where {T,N,A} = _similar(SCA, dims)
+@inline Base.similar(SCA::Type{SemiCircularArray{T,N,SA}}, dims::Tuple{Union{Integer, SOneTo}, Vararg{Union{Integer, SOneTo}}}) where {T,N,SA<:StaticArray} = _similar(SCA, dims)
 
 
-@inline Broadcast.BroadcastStyle(::Type{SemiCircularArray{T,N,A}}) where {T,N,A} = Broadcast.ArrayStyle{SemiCircularArray{T,A}}()
+@inline Broadcast.BroadcastStyle(::Type{SemiCircularArray{T,N,A}}) where {T,N,A} = Broadcast.ArrayStyle{SemiCircularArray{T,N,A}}()
 @inline Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{SemiCircularArray{T,N,A}}}, ::Type{ElType}) where {T,N,A,ElType} = SemiCircularArray(similar(convert(Broadcast.Broadcasted{typeof(Broadcast.BroadcastStyle(A))},bc),ElType))
 
 @inline Base.dataids(arr::SemiCircularArray) = Base.dataids(arr.data)

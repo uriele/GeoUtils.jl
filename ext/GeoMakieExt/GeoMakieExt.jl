@@ -12,19 +12,19 @@ module GeoMakieExt
   @inline _cartesian_z(vgeo::AbstractArray{<:CoordRefSystems.Cartesian3D})=[_cartesian_z(geo) for geo in vgeo];
   function Makie.convert_arguments(::PointBased, geo::CoordRefSystems.Geographic)
     _geo=convert(Cartesian,geo);
-    @info _geo
-    @info _cartesian_x(_geo)
-    @info _cartesian_y(_geo)
-    @info _cartesian_z(_geo)
+    @debug _geo
+    @debug _cartesian_x(_geo)
+    @debug _cartesian_y(_geo)
+    @debug _cartesian_z(_geo)
     return convert_arguments(PointBased(),_cartesian_x(_geo), _cartesian_y(_geo), _cartesian_z(_geo));
   end
 
   function Makie.convert_arguments(::PointBased, vgeo::Vector{T}) where T<:CoordRefSystems.Geographic
     _vgeo=@. convert(CoordRefSystems.Cartesian,vgeo);
-    @info _vgeo
-    @info _cartesian_x(_vgeo)
-    @info _cartesian_y(_vgeo)
-    @info _cartesian_z(_vgeo)
+    @debug _vgeo
+    @debug _cartesian_x(_vgeo)
+    @debug _cartesian_y(_vgeo)
+    @debug _cartesian_z(_vgeo)
     return convert_arguments(PointBased(),_cartesian_x(_vgeo), _cartesian_y(_vgeo), _cartesian_z(_vgeo));
   end
 

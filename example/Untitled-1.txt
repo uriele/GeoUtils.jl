@@ -1,0 +1,3 @@
+
+seq los fov(2) k indspicchi qtan GeoDesicAngle(0 a polo nord) Coord Polari(r,theta)  ECEF(2)
+ 

@@ -238,3 +238,66 @@ for species in (:water,:ice)
     return $species*$(hung_const_sym[6])*exp($(hung_const_sym[7])*pressure)
   end
 end
+
+
+"""
+    MJD2000::Int
+
+The Modified Julian Date for the year 2000 at 00:00:00 UTC, used by the ENVISAT mission.
+"""
+const MJD2000=51544 +2400000.5
+const HOURS2DAY=1/24
+const MINUTES2HOURS=1/60
+const SECONDS2MINUTES=1/60
+const MICROSECONDS2SECOND=1e-6
+
+"""
+  mjd2000_to_jd(days::Int=0,hours::Int=0,minutes::Int=0,seconds::Int=0,microseconds::Number=0.0)
+
+Transform the input time given in days, hours, minutes, seconds and microseconds from the Modified Julian Date 2000 to the Julian Date.
+"""
+function mjd2000_to_jd(days::Int=0,hours::Int=0,minutes::Int=0,seconds::Int=0,microseconds::Int=0)::Float64
+      float(MJD2000+days+(HOURS2DAY*(hours+MINUTES2HOURS*(minutes+SECONDS2MINUTES*(seconds+MICROSECONDS2SECOND*microseconds)))))
+end
+
+
+function ellipsfrome²(e²)
+  b=(1-e²)^(1/2)
+  CoordRefSystems.ellipfromab(1,b)
+end
+
+
+
+function initialize_raytracing_plot(h_levels,θ_radii)
+  fig=Figure(size=(600,800))
+  ax=Axis(fig[1:2,1],
+  xlabel="w",
+  ylabel="z"
+  )
+
+    ax2a=Axis(fig[3,1][1,1],
+    xlabel="Altitude (km)",
+    ylabel="Refractive Index"
+    )
+    ax2b=Axis(fig[3,1][1,2],
+    xlabel="Iteraction",
+    ylabel="Altitude (km)",
+    )
+    #scatter!(ax,hhh.*a)
+    #scatter!(ax,allintersections)
+    for h in h_levels
+      lines!(ax,[let
+        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
+        x-> (x.w,x.z)
+        end
+        for tt in LinRange(0,361,1000)])
+    end
+    for tt in θ_radii
+      lines!(ax,[let
+        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
+        x-> (x.w,x.z)
+        end
+        for h in h_levels])
+    end
+  return (fig,ax,ax2a,ax2b)
+end
