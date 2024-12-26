@@ -81,7 +81,7 @@ module GeoUtils
   export EarthCenteredEarthFixed,ECEF
   export ECEF2D,LLA2D
   export  read_local_atmosphere, read_orbit,discretize_atmosphere
-  export NormalizeEarth,ellipsefrome²
+  export NormalizeEarth,ellipsfrome²
   export setNormalizedEarth,getNormalizedEarth
   export LocalAtmosphere2D,LocalAtmosphereECEF2D,LocalAtmosphereLLA2D
   export Orbit,normalize_orbit
@@ -89,7 +89,7 @@ module GeoUtils
   export LevelIntersection,RadiusIntersection,RadiusLevelIntersection,LevelRadiusIntersection
   export advance,bend,Interface
   export create_rays
-  export Radius,direction,origin
+  export Radius,get_direction,get_origin
   export getIntersectionObjects
 
   export LeftIntersection,RightIntersection
@@ -101,12 +101,12 @@ module GeoUtils
   export TopLeftIntersection,TopRightIntersection
   export BottomLeftIntersection,BottomRightIntersection
 
-  export new_intersection , initialize_raytracing_plot
-
-  using Makie
+  export new_intersection
 
   export LogarithmicPressure,LinearPressure,AbstractPressureInterpolation
-  export Carlotti
+  export Carlotti,NoAtmosphere,geocentric_to_geodesic_θ
+  export create_radii_from_θ,scale_earth_by_h
+  export setDebugIntersection,getDebugIntersection
   #export AzimuthElevationRange,AER
   #export EastNorthUp,ENU
 end

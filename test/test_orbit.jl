@@ -17,7 +17,7 @@ using CoordinateTransformations
     @test e.unscale([1. 0;0. 1.])==[2.0 0.0;0.0 3.0]
   end
 end
-@testset "Distance" begin
+#@testset "Distance" begin
   @testset "Distance from unit circle" begin
     r=Ray2D(Vec2(1.0,1.0),Vec2(-1.0,-1.0))
     @test distance_from_unit_circle(r)≈(sqrt(2)-1)
@@ -31,15 +31,12 @@ end
     @test distance_from_segment(r,Vec2(0.0,0.0),Vec2(0.0,2.0))==Inf
   end
   @testset "Distante from radius" begin
-    r=Ray2D(Vec2(1.0,1.0),Vec2(-1.0,-1.0))
-    τ=GeoUtils.atol(eltype(r.origin))
-    @test (abs.(r(distance_from_radius(r,pi))).<τ) == [true;true]
-    @test distance_from_radius(r,pi/4)==Inf
+    for θ in 1:60
+      match_at_1=convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(1.,θ)) |> x-> Vec2([x.w,x.z])
+      direction_to_radii=Vec2(-1.0,1.0) |> x->x/hypot(x...)
+
+      r=Ray2D(match_at_1.-direction_to_radii,direction_to_radii)
+      my_radius_θ= create_radii_from_θ(θ)
+      @test distance_from_radii(r,my_radius_θ)≈1.0
+    end
   end
-  @testset "Distante from radius new" begin
-    r=Ray2D(Vec2(1.0,1.0),Vec2(-1.0,-1.0))
-    τ=GeoUtils.atol(eltype(r.origin))
-    @test (abs.(r(distance_from_radius_new(r,pi))).<τ) == [true;true]
-    @test distance_from_radius_new(r,pi/4)==Inf
-  end
-end

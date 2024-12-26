@@ -13,14 +13,14 @@ end
 
 # ╔═╡ 7e2e7a19-d2a1-40f2-8d1b-d1b6606d2ed2
 begin
-	a=100
+	majoraxis_earth=100
 	b=50
 	ang=LinRange(0,3600,360)
-	#_x(theta,h=0)=cosd(theta)*(a+h)
+	#_x(theta,h=0)=cosd(theta)*(majoraxis_earth+h)
 	#_y(theta,h=0)=sind(theta)*(b+h)
-	_x(theta,h=0)=cosd(theta)*(a+h)
+	_x(theta,h=0)=cosd(theta)*(majoraxis_earth+h)
 	_y(theta,h=0)=sind(theta)*(b+h)
-	_invx(x)=x/(a+5)
+	_invx(x)=x/(majoraxis_earth+5)
 	_invy(y)=y/(b+5)
 	fig=Figure(size=(600,300))
 	ax=Axis(fig[1,1])
@@ -32,8 +32,8 @@ begin
 	ylims!(ax3,-4,4)
 
 
-	_rad1(t;theta=0,a=a,b=b)=(cosd(theta), sind(theta)).+t.*direc(theta,a,b)
-	direc(theta,a,b)= (cosd(theta), sind(theta))./(1/a^2,1/b^2) |> x-> x./hypot(x...)
+	_rad1(t;theta=0,majoraxis_earth=majoraxis_earth,b=b)=(cosd(theta), sind(theta)).+t.*direc(theta,majoraxis_earth,b)
+	direc(theta,majoraxis_earth,b)= (cosd(theta), sind(theta))./(1/majoraxis_earth^2,1/b^2) |> x-> x./hypot(x...)
 	@ _rad1(1)
 #=
 	(a²b²+2a²bh+a²h²)+
@@ -53,7 +53,7 @@ begin
 	(2abh²+ab²h+a²bh+)=2bh*x+2ah*y
 
 
-	a(x,y)=hypot(x/a,y/a)
+	majoraxis_earth(x,y)=hypot(x/majoraxis_earth,y/majoraxis_earth)
 	b(x,y)=
 =#
 
@@ -70,7 +70,7 @@ begin
 	ang_left=map(x->mod1(x,360),LinRange(0,360,N+1))
 	ang_right=ang_left[2:end]
 	ang_left=ang_left[1:end-1]
-	inva=1/a
+	inva=1/majoraxis_earth
 	invb=1/b
 	T=eltype(ang_left)
 	h=LinRange(0,10,10) |> reverse
@@ -82,8 +82,8 @@ begin
 
 
 	for h in 0:5
-		l1=map(a->(_x(a,h),_y(a,h)),ang)
-		#l2=map(l->(l[1]/(a+h)*(1+h/5),l[2]/(b+h)*(1+h/5),h),l1)
+		l1=map(majoraxis_earth->(_x(majoraxis_earth,h),_y(majoraxis_earth,h)),ang)
+		#l2=map(l->(l[1]/(majoraxis_earth+h)*(1+h/5),l[2]/(b+h)*(1+h/5),h),l1)
 		l2=map(l->(_invx(l[1]),_invy(l[2]),-h),l1)
 		lines!(ax,l1)
 		lines!(ax3,l2)
@@ -91,10 +91,10 @@ begin
 	h1=-5:5
 	for ang in LinRange(0,360,36)
 		#g1=map(h->(_x(ang,h),_y(ang,h)),h1)
-		#g2=map(l->(l[1][1]/(a+l[2])*(1+l[2]),l[1][2]/(b+l[2])*(1+l[2]),l[2]),zip(g1,h1))
+		#g2=map(l->(l[1][1]/(majoraxis_earth+l[2])*(1+l[2]),l[1][2]/(b+l[2])*(1+l[2]),l[2]),zip(g1,h1))
 		g1=[_rad1(x;theta=ang) for x in h1, ang in ang]
 			@ g1
-		#g2=map(l->(l[1][1]/(a+l[2])*(1+l[2]/5),l[1][2]/(b+l[2])*(1+l[2]/5)),zip(g1,h1))
+		#g2=map(l->(l[1][1]/(majoraxis_earth+l[2])*(1+l[2]/5),l[1][2]/(b+l[2])*(1+l[2]/5)),zip(g1,h1))
 		#g2=map(l->(_invx(l[1][1]),_invy(l[1][2]),-l[2]),zip(g1,h1))
 		g2=map(l->(_invx(l[1][1]),_invy(l[1][2])),zip(g1,h1))
 		lines!(ax,g1)
@@ -106,7 +106,7 @@ begin
 	ax2=Axis(fig[2,1])
 	for ang in M.ang_right[1,:]
 		lines!(ax,_rad1.(LinRange(0,1,100);theta=ang))
-		lines!(ax,_rad1.(LinRange(-0.5,1,100);theta=ang,a=a-0.5,b=b-0.5);linestyle=:dash)
+		lines!(ax,_rad1.(LinRange(-0.5,1,100);theta=ang,majoraxis_earth=majoraxis_earth-0.5,b=b-0.5);linestyle=:dash)
 	end
 	fig
 end
@@ -115,10 +115,10 @@ end
 let
 	N=360
 	a1=b
-	b1=a
+	b1=majoraxis_earth
 	s= StructArray([begin
-			  l=hypot(cosd(ang)/a^2,sind(ang)/b^2)
-			  (cosd(ang)/a^2,sind(ang)/b^2) #./l
+			  l=hypot(cosd(ang)/majoraxis_earth^2,sind(ang)/b^2)
+			  (cosd(ang)/majoraxis_earth^2,sind(ang)/b^2) #./l
 	         end for ang in 0:N])
 	fig=Figure()
 	s1= StructArray([begin
@@ -127,7 +127,7 @@ let
 	         end for ang in 0:N])
 
 	hh(h,θ)=(h)*hypot(cosd(θ)/a1^2,sind(θ)/b1^2)
-	hh1(x,y)= hypot(x,y)-1 |> h-> (h,atand(x*(1+h/b),y*(1+h/a))) |> x-> (cosd(x[2]),sind(x[2]),hh(x...))
+	hh1(x,y)= hypot(x,y)-1 |> h-> (h,atand(x*(1+h/b),y*(1+h/majoraxis_earth))) |> x-> (cosd(x[2]),sind(x[2]),hh(x...))
 	#=
 	ax,lin=lines(fig[1,1],0:N,StructArrays.component(s,1),label="x′",color="blue")
 	lines!(ax,0:N,StructArrays.component(s,2),label="y′",color="red")
@@ -144,11 +144,11 @@ let
 	for h in 0:10
 		#lines!(ax13,[cosd(θ),sind(θ),hh(h,θ)) for θ in 0:N])
 		circ=[begin
-			(cosd(θ)*(a+h)/(b+h)*b/a,sind(θ)*(a+h)/(b+h)*b/a,(a/b)*((b+hh(h,θ))/(a+hh(h,θ))))
+			(cosd(θ)*(majoraxis_earth+h)/(b+h)*b/majoraxis_earth,sind(θ)*(majoraxis_earth+h)/(b+h)*b/majoraxis_earth,(majoraxis_earth/b)*((b+hh(h,θ))/(majoraxis_earth+hh(h,θ))))
 			end
 			for θ in 0:N]
 		circb=[begin
-			(cosd(θ)*(a+h)/a,sind(θ)*(b+h)/b,1)
+			(cosd(θ)*(majoraxis_earth+h)/majoraxis_earth,sind(θ)*(b+h)/b,1)
 			end
 			for θ in 0:N]
 		@ begin
@@ -160,7 +160,7 @@ let
 			end
 			(cc/2/pi,cc1/2/pi)
 		end
-		@ a,b,
+		@ majoraxis_earth,b,
 		lines!(ax13,circ)
 		lines!(ax13,circb,linestyle=:dash)
 	end
@@ -168,7 +168,7 @@ let
 	for θ in LinRange(0,360,12)
 		#lines!(ax13,[((1+hh(_h,θ))*cosd(θ),(1+hh(_h,θ))*sind(θ),hh(_h,θ)) for _h in [0,10]])
 		lines!(ax3,[begin
-			(cosd(θ)/a^2*h,sind(θ)/b^2*h,(a/(a+h))/(b/(b+h))) |>
+			(cosd(θ)/majoraxis_earth^2*h,sind(θ)/b^2*h,(majoraxis_earth/(majoraxis_earth+h))/(b/(b+h))) |>
 			direc-> (1+h).*direc./(hypot(direc...))
 			end
 			for h in -10:10])
@@ -199,16 +199,16 @@ StructArrays.components(s)[2]
 
 # ╔═╡ 1da58c04-3445-434b-ae2c-f862a0ae0e1b
 let
-# Let us consider a single element.
+# Let us consider majoraxis_earth single element.
 # - the major and minor axis are given by a′,b′
 # - the local distance between the two  ellipses is h
 # I want to project it into a space where the lower circ is unitary and the top one projected on the xy plane has radius 2
 
-	a=10
+	majoraxis_earth=10
 	b=5
 	h=1
-	mapping=[1/a 0;0 1/b;0 0]
-	_circ(θ;a=a,b=b,h=0)=((a+h)*cosd(θ),(b+h)*sind(θ))
+	mapping=[1/majoraxis_earth 0;0 1/b;0 0]
+	_circ(θ;majoraxis_earth=majoraxis_earth,b=b,h=0)=((majoraxis_earth+h)*cosd(θ),(b+h)*sind(θ))
 	fig=Figure(size=(600,600))
 	θ=LinRange(0,360,720)
 	ax1,l1=lines(fig[1,1],map(θ->_circ(θ),θ))
@@ -219,11 +219,11 @@ let
 	ax2.title="Projected Space"
 	#lines!(ax2,map(θ->Tuple((mapping*Vec(_circ(θ;h=h)...))),θ))
 
-	b′(h)=(1+h/a)/(1+h/b)
-	a′(h)=(1+h/a)/(1+h/a)
+	b′(h)=(1+h/majoraxis_earth)/(1+h/b)
+	a′(h)=(1+h/majoraxis_earth)/(1+h/majoraxis_earth)
 	m1(h,θ)=[1 0 0 0;0 1 0 0 ;0 0 0 begin
-			leff²=(((1+h/a)*cosd(θ))^2+((1+h/b)*sind(θ))^2)
-			sqrt(max(0,leff²-(1+h/a)^2))
+			leff²=(((1+h/majoraxis_earth)*cosd(θ))^2+((1+h/b)*sind(θ))^2)
+			sqrt(max(0,leff²-(1+h/majoraxis_earth)^2))
 		end;
 		0 0 0 0
 		]
@@ -238,8 +238,8 @@ let
 
 	@ _circ(0)
 
-	mm=[1/a 0;0 1/b]
-	ma(h)=[1/(1+h/a) 0;0 1/(1+h/b)]*mm
+	mm=[1/majoraxis_earth 0;0 1/b]
+	ma(h)=[1/(1+h/majoraxis_earth) 0;0 1/(1+h/b)]*mm
 	tt(h)=map(θ->Tuple(push!(ma(h)*Vec(_circ(θ;h=h)...),h)),θ)
 	#
 	lines!(tt(0))
@@ -268,7 +268,7 @@ let
 	figure1=Figure()
 	axx=Axis(figure1[1,1])
 	#lines!(axx,map(h->(h,0.5*frac(h)),0:1000))
-	lines!(axx,map(h->(h,0.5*invfrac(h,h-1,a)),1:1000))
+	lines!(axx,map(h->(h,0.5*invfrac(h,h-1,majoraxis_earth)),1:1000))
 	lines!(axx,map(h->(h,0.5*invfrac(h,h-1,b)),1:1000))
 
 
@@ -277,7 +277,7 @@ let
 end
 
 # ╔═╡ 49ac1555-0774-4e34-a4e3-58aa19b47e37
-a/(a+h),
+majoraxis_earth/(majoraxis_earth+h),
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """

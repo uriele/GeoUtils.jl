@@ -100,21 +100,21 @@ end
 fig=Figure(aspect_ratio=1)
 ax=Axis(fig[1,1],xlabel="x (km)",ylabel="y (km)")
 a=majoraxis(ellipsoid(WGS84)) |> x-> uconvert(km,x) |> ustrip
-EarthModel!(ax,h,θ;a=50)
+EarthModel!(ax,h,θ;majoraxis_earth=50)
 
-a=50
+majoraxis_earth=50
 eccentricity= 0.0818191908426215
-b=a*sqrt(1-eccentricity^2)
-satellite= cosd(45)*(a+140),sind(45)*(b+140)
-tang_v(x,y,h;a=a,b=b)=2.0.*(x/(a+h)^2,y/(b+h)^2)
+b=majoraxis_earth*sqrt(1-eccentricity^2)
+satellite= cosd(45)*(majoraxis_earth+140),sind(45)*(b+140)
+tang_v(x,y,h;majoraxis_earth=majoraxis_earth,b=b)=2.0.*(x/(majoraxis_earth+h)^2,y/(b+h)^2)
 
 tang_v(satellite...,140)
 
 atand(tang_v(satellite...,140)...)
 
 
-x0=a*cosd(45)
-x1=(a+140)*cosd(45)
+x0=majoraxis_earth*cosd(45)
+x1=(majoraxis_earth+140)*cosd(45)
 y0=b*sind(45)
 y1=(b+140)*sind(45)
 
@@ -125,17 +125,17 @@ limb_angle= 20
 
 scatter!(ax,[satellite],color=:red)
 
-a=50
+majoraxis_earth=50
 b=48
-N(t)=a^2/sqrt(a^2*cosd(t)^2+b^2*sind(t)^2)
-N1(t,h)=(a+h)^2/sqrt((a+h)^2*cosd(t)^2+(b+h)^2*sind(t)^2)
+N(t)=majoraxis_earth^2/sqrt(majoraxis_earth^2*cosd(t)^2+b^2*sind(t)^2)
+N1(t,h)=(majoraxis_earth+h)^2/sqrt((majoraxis_earth+h)^2*cosd(t)^2+(b+h)^2*sind(t)^2)
 X(t,h=0)=(N(t)+h)*cosd(t)
-Y(t,h=0)=(b^2/a^2*N(t)+h)*sind(t)
+Y(t,h=0)=(b^2/majoraxis_earth^2*N(t)+h)*sind(t)
 
 X1(t,h=0)=N1(t,h)*cosd(t)
-Y1(t,h=0)=(b+h)^2/(a+h)^2*N1(t,h)*sind(t)
+Y1(t,h=0)=(b+h)^2/(majoraxis_earth+h)^2*N1(t,h)*sind(t)
 
-X2(t,h=0)=(a+h)*cosd(t)
+X2(t,h=0)=(majoraxis_earth+h)*cosd(t)
 Y2(t,h=0)=(b+h)*sind(t)
 
 [hypot(X(45,h)-X1(45,h),Y(45,h)-Y1(45,h)) for h in LinRange(0,100,1000)] |> x-> extrema(x)
@@ -153,58 +153,58 @@ xlims!(ax,-60.5,-59.5)
 ylims!(ax,-0.5,0.5)
 
 using Symbolics
-@variables x y h t a b e²
+@variables x y h t majoraxis_earth b squared_eccentricity_earth
 
-N(t)=a^2/(a^2*cosd(t)^2-b^2*sind(t)^2)^(1/2)
+N(t)=majoraxis_earth^2/(majoraxis_earth^2*cosd(t)^2-b^2*sind(t)^2)^(1/2)
 X(t)=(N(t)+h)*cos(t)
-Y(t)=((1-e²)*N(t)+h)*sin(t)
+Y(t)=((1-squared_eccentricity_earth)*N(t)+h)*sin(t)
 
 Dt=Differential(t)
 Dx=Differential(x)
 Dy=Differential(y)
 
-expand_derivatives(Dx(x^2/a^2+y^2/b^2))
+expand_derivatives(Dx(x^2/majoraxis_earth^2+y^2/b^2))
 
 simplify(expand_derivatives(Dt(N(t)))/N(t))
 
 simplify(sin(t)*cos(t)/2)
 
-simplify(X(t)^2/a^2+Y(t)^2/b^2)
+simplify(X(t)^2/majoraxis_earth^2+Y(t)^2/b^2)
 
 simplify(N(t)^2)
 
 
-expand_derivatives(Dt(1/sqrt(cos(t)^2+(1-e²)*sin(t)^2)))
+expand_derivatives(Dt(1/sqrt(cos(t)^2+(1-squared_eccentricity_earth)*sin(t)^2)))
 
 
 lines([begin
-  (M1*[(a+h)*cosd(tt);(b+h)*sind(tt)]) |>
-  x-> (x[1]/(1+h/a),x[2]/(1+h/b)) |>
+  (M1*[(majoraxis_earth+h)*cosd(tt);(b+h)*sind(tt)]) |>
+  x-> (x[1]/(1+h/majoraxis_earth),x[2]/(1+h/b)) |>
   x-> sum(x-> x^2,x) |> sqrt |> x-> (x[1]*cosd(tt),x[2]*sind(tt))
 end
   for tt in 0:360])
 
-a=50
+majoraxis_earth=50
 b=48
 
-M=[a 0;0 b]
+M=[majoraxis_earth 0;0 b]
 M1=inv(M)
 h=10
-lines!([Tuple(M*[(1+h/a)*cosd(tt);(1+h/b)*sind(tt)]) for tt in 0:360],color=:black)
-a= 100
+lines!([Tuple(M*[(1+h/majoraxis_earth)*cosd(tt);(1+h/b)*sind(tt)]) for tt in 0:360],color=:black)
+majoraxis_earth= 100
 b=50
-phi(t,h)=atand((N(t)*b^2/a^2+h)/(N(t)+h)*tand(t))
-X(t,h=0)=(a+h)*cosd(t)
+phi(t,h)=atand((N(t)*b^2/majoraxis_earth^2+h)/(N(t)+h)*tand(t))
+X(t,h=0)=(majoraxis_earth+h)*cosd(t)
 Y(t,h=0)=(b+h)*sind(t)
-N(t)=a^2/sqrt(a^2*cosd(t)^2+b^2*sind(t)^2)
+N(t)=majoraxis_earth^2/sqrt(majoraxis_earth^2*cosd(t)^2+b^2*sind(t)^2)
 X1(t,h=0)=(N(t)+h)*cosd(t)
-Y1(t,h=0)=(b^2/a^2*N(t)+h)*sind(t)
+Y1(t,h=0)=(b^2/majoraxis_earth^2*N(t)+h)*sind(t)
 
 
-a
+majoraxis_earth
 b
 h
-hypot(a*cosd(45)-(a+h)*cosd(45),b*sind(45)-(b+h)*sind(45))
+hypot(majoraxis_earth*cosd(45)-(majoraxis_earth+h)*cosd(45),b*sind(45)-(b+h)*sind(45))
 
 
 fig=Figure(aspect_ratio=1)
@@ -218,9 +218,9 @@ lines!(ax,[(X1(t,10),Y1(t,10)) for t in LinRange(0,360,720)],color=:blue,linesty
 hypot(X(45,0)-X(45,10),Y(45,0)-Y(45,10))
 
 
-norm_vec(t,h)= [X(t,h)/(a+h)^2,Y(t,h)/(b+h)^2] |> x-> (x[1],x[2])./hypot(x[2],x[1])
+norm_vec(t,h)= [X(t,h)/(majoraxis_earth+h)^2,Y(t,h)/(b+h)^2] |> x-> (x[1],x[2])./hypot(x[2],x[1])
 
-norm_vec1(t,h)= [X1(t,h)/(a+h)^2,Y1(t,h)/(b+h)^2] |> x-> atand(x[2],x[1])
+norm_vec1(t,h)= [X1(t,h)/(majoraxis_earth+h)^2,Y1(t,h)/(b+h)^2] |> x-> atand(x[2],x[1])
 
 atand(norm_vec(45,0)[2:-1:1]...)
 atand(norm_vec(45,100)[2:-1:1]...)
@@ -255,9 +255,9 @@ lines([dot([r(1,t).-r(0,t)],[TT(1,t).-TT(0,t)]) for t in LinRange(0,360,720)])
 
 h=0.0
 
-expand(TT(t,45,h)[1]^2*(b+h)^2+TT(t,45,h)[2]^2*(a+h)^2-(a+h)^2*(b+h)^2)
+expand(TT(t,45,h)[1]^2*(b+h)^2+TT(t,45,h)[2]^2*(majoraxis_earth+h)^2-(majoraxis_earth+h)^2*(b+h)^2)
 
-(A,B,C)=expand(TT(t,45,h)[1]^2*(b+h)^2+TT(t,45,h)[2]^2*(a+h)^2-(a+h)^2*(b+h)^2) |> x-> Symbolics.coeff.(x,[t^2,t,1])
+(A,B,C)=expand(TT(t,45,h)[1]^2*(b+h)^2+TT(t,45,h)[2]^2*(majoraxis_earth+h)^2-(majoraxis_earth+h)^2*(b+h)^2) |> x-> Symbolics.coeff.(x,[t^2,t,1])
 
 B
 C
@@ -274,19 +274,19 @@ A
   h₂::T=1.0
   θ₁::T=0.0
   θ₂::T=90.0
-  a ::T=1.0
+  majoraxis_earth ::T=1.0
   b ::T=0.9
 end
 
-@inline _ellipse_point(a,b,h,θ)=Point2f((a+h)*cosd(θ),(b+h)*sind(θ))
+@inline _ellipse_point(majoraxis_earth,b,h,θ)=Point2f((majoraxis_earth+h)*cosd(θ),(b+h)*sind(θ))
 function mycoordinates(w::WedgeAtm{T},nvertex=60) where T
   p=Point2f[]
 
   for θ in LinRange(w.θ₁,w.θ₂,nvertex)
-    push!(p,_ellipse_point(w.a,w.b,w.h₁,θ))
+    push!(p,_ellipse_point(w.majoraxis_earth,w.b,w.h₁,θ))
   end
   for θ in LinRange(w.θ₂,w.θ₁,nvertex)
-    push!(p,_ellipse_point(w.a,w.b,w.h₂,θ))
+    push!(p,_ellipse_point(w.majoraxis_earth,w.b,w.h₂,θ))
   end
   return p
 end
@@ -332,27 +332,27 @@ datum= WGS84Latest
 🌎 = ellipsoid(datum)
 ϕ = ustrip.(deg2rad(float(10deg)))
 e = oftype(ϕ, eccentricity(🌎))
-e² = oftype(ϕ, eccentricity²(🌎))
+squared_eccentricity_earth = oftype(ϕ, eccentricity²(🌎))
 
 ϕ′ = oftype(ϕ, deg2rad(10.0))
 
-ϕa=atan(1/(1-e²)*tan(ϕ′))
+ϕa=atan(1/(1-squared_eccentricity_earth)*tan(ϕ′))
 
 ϕb=ϕ′
 
-a= majoraxis(🌎) |> x-> uconvert(km,x) |> ustrip
+majoraxis_earth= majoraxis(🌎) |> x-> uconvert(km,x) |> ustrip
 
-_C(x)=1/sqrt(1-e²*sin(x)^2)
+_C(x)=1/sqrt(1-squared_eccentricity_earth*sin(x)^2)
 
 
-R=hypot(a*cos(ϕ′),b*sin(ϕ′))
+R=hypot(majoraxis_earth*cos(ϕ′),b*sin(ϕ′))
 
 h=1000
 ϕb=ϕ′
 
 
-fromGtoE(ϕb,h)=(1-e²*_NN(ϕb)/(_NN(ϕb)+h))
-_NN=ϕ->a/sqrt(1-e²*sin(ϕ)^2)
+fromGtoE(ϕb,h)=(1-squared_eccentricity_earth*_NN(ϕb)/(_NN(ϕb)+h))
+_NN=ϕ->majoraxis_earth/sqrt(1-squared_eccentricity_earth*sin(ϕ)^2)
 
 fromEtoG(ϕb,h)=fromGtoE(ϕb,h)^-1
 
@@ -402,7 +402,7 @@ dx1,dy1=R(45)*[dx0,dy0]
 r(t1)=[x0+dx1*t1,y0+dy1*t1]
 r1(t1)=[x0+x0*t1,y0+y0/b^2*t1]
 r2(t1)=[x0+dx0*t1,y0+dy0/b^2*t1]
-h=120000/a+0.3
+h=120000/majoraxis_earth+0.3
 
 AA=dx1^2/(1+h)^2+dy1^2/(b+h)^2
 BB=2*((x0*dx1)/(1+h)^2+(y0*dy1)/(b+h)^2)
@@ -456,7 +456,7 @@ h
 
 
 let
-bb=a*0.5
+bb=majoraxis_earth*0.5
 ee2=1-b^2
 t=0
 
@@ -467,22 +467,22 @@ function conic_coeff(points)
   _,_,V=svd(A)
   return V[:,end] |> x -> x./x[end] |> x -> x[abs.(x).<1e-10]=0
 end
-h=a
-Na(t)=a^2/sqrt(a^2*cosd(t)^2+bb^2*sind(t)^2)
-Nb(t)=bb^2/sqrt(a^2*cosd(t)^2+bb^2*sind(t)^2)
+h=majoraxis_earth
+Na(t)=majoraxis_earth^2/sqrt(majoraxis_earth^2*cosd(t)^2+bb^2*sind(t)^2)
+Nb(t)=bb^2/sqrt(majoraxis_earth^2*cosd(t)^2+bb^2*sind(t)^2)
 
 @ conic_coeff([(Na(t),Nb(t)) for t in LinRange(0,90,10)])
 
 for t in LinRange(0,90,10)
 
   xx,yy=((Na(t)+h)*cosd(t),(Nb(t)+h)*sind(t))
-  @ t,xx^2/(a+h)^2+yy^2/(bb+h)^2,
-  xx^2/(a+h)^2+yy^2/(bb+h)^2-
-  2*h/a^2*yy-2*h/bb^2*xx
+  @ t,xx^2/(majoraxis_earth+h)^2+yy^2/(bb+h)^2,
+  xx^2/(majoraxis_earth+h)^2+yy^2/(bb+h)^2-
+  2*h/majoraxis_earth^2*yy-2*h/bb^2*xx
 end
 
 for t in LinRange(0,90,10)
-  @ t,(a^2)*cosd(t)^2/a^2+(bb^2)*sind(t)^2/bb^2
+  @ t,(majoraxis_earth^2)*cosd(t)^2/majoraxis_earth^2+(bb^2)*sind(t)^2/bb^2
 end
 end
 
@@ -498,20 +498,20 @@ function conic_coeff(points)
 end
 let
   h=800000
-  bb=b*a
+  bb=b*majoraxis_earth
 
-  Na(t)=a^2/sqrt(a^2*cosd(t)^2+bb^2*sind(t)^2)
-  Nb(t)=bb^2/sqrt(a^2*cosd(t)^2+bb^2*sind(t)^2)
-  Nah(t,h)=(a+h)^2/sqrt((a+h)^2*cosd(t)^2+(bb+h)^2*sind(t)^2)
-  Nbh(t,h)=(bb+h)^2/sqrt((a+h)^2*cosd(t)^2+(bb+h)^2*sind(t)^2)
+  Na(t)=majoraxis_earth^2/sqrt(majoraxis_earth^2*cosd(t)^2+bb^2*sind(t)^2)
+  Nb(t)=bb^2/sqrt(majoraxis_earth^2*cosd(t)^2+bb^2*sind(t)^2)
+  Nah(t,h)=(majoraxis_earth+h)^2/sqrt((majoraxis_earth+h)^2*cosd(t)^2+(bb+h)^2*sind(t)^2)
+  Nbh(t,h)=(bb+h)^2/sqrt((majoraxis_earth+h)^2*cosd(t)^2+(bb+h)^2*sind(t)^2)
 
   cc=conic_coeff([((Na(t)+h)*cosd(t),(Nb(t)+h)*sind(t)) for t in LinRange(0.1,89.9,6)])
   (x,y)=((Na(45)+h)*cosd(45),(Nb(45)+h)*sind(45))
   (x1,y1)=((Na(45))*cosd(45),(Nb(45))*sind(45))
   (x2,y2)=((Nah(45,h))*cosd(45),(Nbh(45,h))*sind(45))
   @ cc
-  @ atand(y/(bb+h)^2,x/(a+h)^2)
-  @ atand(y2/(bb+h)^2,x2/(a+h)^2)
+  @ atand(y/(bb+h)^2,x/(majoraxis_earth+h)^2)
+  @ atand(y2/(bb+h)^2,x2/(majoraxis_earth+h)^2)
    @ extrema([let
    ((Na(t)+h)*cosd(t),(Nb(t)+h)*sind(t),(Nah(t,h))*cosd(t),(Nbh(t,h))*sind(t)) |>
    x-> hypot(x[1]-x[3],x[2]-x[4])
@@ -519,8 +519,8 @@ let
   for t in LinRange(0,90,900)])
 
 
-  @ atand(y1/(bb)^2,x1/(a)^2)
-  @ atand(y2/(bb+h)^2,x2/(a+h)^2)
+  @ atand(y1/(bb)^2,x1/(majoraxis_earth)^2)
+  @ atand(y2/(bb+h)^2,x2/(majoraxis_earth+h)^2)
   @ extrema([let
   ((Na(t))*cosd(t),(Nb(t))*sind(t),(Nah(t,h))*cosd(t),(Nbh(t,h))*sind(t)) |>
   x-> hypot(x[1]-x[3],x[2]-x[4])
@@ -554,14 +554,14 @@ scatter([(w,z) for (w,z) in zip(orbit.w[:],orbit.z[:])])
 
 let
 
-  h=800000/a
+  h=800000/majoraxis_earth
   tt=LinRange(0,360,100)
   figure=Figure(size=(1000,1000))
-  ax=Axis(figure[1:2,1:2][1,1],title="b/a: $(round(b,digits=4)) h: $(a*h*10^-3)km",
+  ax=Axis(figure[1:2,1:2][1,1],title="b/majoraxis_earth: $(round(b,digits=4)) h: $(majoraxis_earth*h*10^-3)km",
   xlabel="km",ylabel="km")
 
-  lines!(ax,[(X(a*h,t,a*b;a=a),Y(a*h,t,b*a;a=a)) for t in tt],color=:red,linestyle=:dash)
-  lines!(ax,[(X1(a*h,t,a*b;a=a),Y1(a*h,t,b*a;a=a)) for t in tt],color=:blue,linestyle=:dot)
+  lines!(ax,[(X(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth),Y(majoraxis_earth*h,t,b*majoraxis_earth;majoraxis_earth=majoraxis_earth)) for t in tt],color=:red,linestyle=:dash)
+  lines!(ax,[(X1(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth),Y1(majoraxis_earth*h,t,b*majoraxis_earth;majoraxis_earth=majoraxis_earth)) for t in tt],color=:blue,linestyle=:dot)
   bb=b
 
   let
@@ -578,20 +578,20 @@ let
 
 
       lines!(ax1,tt,[
-          hypot(X(a*h,t,a*b;a=a)-X1(a*h,t,a*b;a=a),
-          Y(a*h,t,a*b;a=a)-Y1(a*h,t,a*b;a=a),
+          hypot(X(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth)-X1(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth),
+          Y(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth)-Y1(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth),
           )
-          for t in tt],label="b/a: $(round(b,digits=4))")
+          for t in tt],label="b/majoraxis_earth: $(round(b,digits=4))")
 
         lines!(ax2,tt,[1-
-        hypot(X1(a*h,t,a*b;a=a)-X(0,t,a*b;a=a),
-        Y1(a*h,t,a*b;a=a)-Y(0,t,a*b;a=a),
-        )./(h*a)
-        for t in tt],label="b/a: $(round(b,digits=4))")
+        hypot(X1(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth)-X(0,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth),
+        Y1(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth)-Y(0,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth),
+        )./(h*majoraxis_earth)
+        for t in tt],label="b/majoraxis_earth: $(round(b,digits=4))")
         lines!(ax3,tt,[
         (
-        atand(Y1(a*h,t,a*b;a=a)/(a*b+a*h)^2,X1(a*h,t,a*b;a=a)/(a*(1+h))^2)-
-        atand(Y(a*h,t,a*b;a=a)/(a*b)^2,X(a*h,t,a*b;a=a)/a^2)
+        atand(Y1(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth)/(majoraxis_earth*b+majoraxis_earth*h)^2,X1(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth)/(majoraxis_earth*(1+h))^2)-
+        atand(Y(majoraxis_earth*h,t,majoraxis_earth*b;majoraxis_earth=majoraxis_earth)/(majoraxis_earth*b)^2,X(majoraxis_earth*h,t,a*b;a=a)/a^2)
         )*1e3
         for t in tt],label="b/a: $(round(b,digits=4))")
 

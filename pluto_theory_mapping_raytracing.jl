@@ -21,9 +21,9 @@ We want to remember that in the real space the normal and the tangent to a point
 
 ```math
 
-\hat{n}(x,y)=(x/a,y/b)
+\hat{n}(x,y)=(x/majoraxis_earth,y/b)
 \quad
-\hat{t}(x,y)=(y/b,x/a)
+\hat{t}(x,y)=(y/b,x/majoraxis_earth)
 ```
 
 Where nₐ=x/a≤1, nᵦ=/b≤1, and and Now if we define the vector normal to the intersection point as a Ray in the real space, we obtain:

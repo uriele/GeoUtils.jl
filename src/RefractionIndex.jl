@@ -10,7 +10,7 @@ struct Mathar4 <: Mathar end
 struct Birch <: AirModel end
 struct Peck <: AirModel end
 struct Carlotti <: AirModel end
-
+struct NoAtmosphere <: AirModel end
 """
   refractive_index([::AirModel=Ciddor];
   temperature::Union{T,Quantity{T,𝚯}}=15°C,
@@ -83,6 +83,16 @@ const CARLOTTI_RATIO_PRESSURE_TEMPERATURE=288.16/1013.25
   return T(1.0)+CARLOTTI_BASE_CONSTANT*(pressure_mbar/temperature_kelvin)*CARLOTTI_RATIO_PRESSURE_TEMPERATURE
 
 end
+
+
+@inline function _refractive_index(model::N,temperature::T,pressure::T,wavelength::T,humidity::T,CO2ppm::T)::T where {T<:IEEEFloat,N<:NoAtmosphere}
+#  temperature_kelvin = ustrip(uconvert(K,temperature*°C))   # Temperature: K
+#  pressure_mbar = ustrip(uconvert(u"mbar",pressure*Pa))   # Pressure: Pa
+
+  return T(1.0)+CARLOTTI_BASE_CONSTANT  #*(pressure_mbar/temperature_kelvin)*CARLOTTI_RATIO_PRESSURE_TEMPERATURE
+
+end
+
 
 
 @inline function _const_mathar(::Mathar,::Type{T}) where T<:IEEEFloat
@@ -187,10 +197,14 @@ end
     σ = ustrip(uconvert(cm^-1,T(1/wavelength)*μm^-1))
     # model parameters
 
-    MATHAR_WAVELENGTHS=T.(_mathar_range(M))
+    MATHAR_WAVELENGTHS=sort(T.(_mathar_range(M)))
     MATHAR_PARAMETERS,MATHAR_WAVELENGTH_REF = _const_mathar(M,T)
 
-    @inline _between(x,a,b)=max(min(x,a),b)
+    @inline function _between(x,lower_bound,upper_bound)
+      (lower_bound==upper_bound) && return lower_bound
+      (_lower,_upper)=(lower_bound>upper_bound) ? (upper_bound,lower_bound) : (lower_bound,upper_bound)
+      return max(min(x,_upper),_lower)
+    end
 
     σ = _between(σ,MATHAR_WAVELENGTHS...)
 

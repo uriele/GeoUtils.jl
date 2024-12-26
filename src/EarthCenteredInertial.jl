@@ -68,16 +68,16 @@ end
 ==(coords₁::ECEF{Datum},coord₂::ECEF{Datum}) where {Datum}=coords₁.E==coord₂.E && coords₁.F==coord₂.F && coords₁.G==coord₂.G
 
 Random.rand(rng::Random.AbstractRNG,::Type{EarthCenteredEarthFixed{Datum}}) where {Datum}=let
-  a=majoraxis(ellipsoid(Datum)) |> x-> uconvert(km,x) |> ustrip
-  e²=eccentricity²(ellipsoid(Datum))
+  majoraxis_earth=majoraxis(ellipsoid(Datum)) |> x-> uconvert(km,x) |> ustrip
+  squared_eccentricity_earth=eccentricity²(ellipsoid(Datum))
   h=rand(rng)*100;
   ϕ=-90+180*rand(rng)
   γ=-180+360*rand(rng)
-  N=a/sqrt(1-e²*sin(ϕ)^2)
+  N=majoraxis_earth/sqrt(1-squared_eccentricity_earth*sin(ϕ)^2)
   EarthCenteredEarthFixed{Datum}(
     (N+h)*cosd(ϕ)*cosd(γ),
     (N+h)*cosd(ϕ)*sind(γ),
-    (N*(1-e²)+h)*sind(ϕ)
+    (N*(1-squared_eccentricity_earth)+h)*sind(ϕ)
   )
 end
 
@@ -171,11 +171,11 @@ lentype(::Type{<:EarthCenteredInertial{Datum,D,L}}) where {Datum,D,L}=L
 coords₁.altitude==coord₂.altitude && coords₁.azimuth==coord₂.azimuth && coords₁.radius==coord₂.radius
 
 Random.rand(rng::Random.AbstractRNG,::Type{EarthCenteredInertial{Datum}}) where {Datum}=let
-  a=majoraxis(ellipsoid(Datum)) |> x-> uconvert(km,x) |> ustrip
+  majoraxis_earth=majoraxis(ellipsoid(Datum)) |> x-> uconvert(km,x) |> ustrip
   EarthCenteredInertial{Datum}(
     -90+180*rand(rng),
     -180+360*rand(rng),
-    a+800*abs(rand(rng))
+    majoraxis_earth+800*abs(rand(rng))
   )
 end
 Random.rand(rng::Random.AbstractRNG,::Type{EarthCenteredInertial})= rand(rng,ECI{WGS84Latest})
@@ -250,10 +250,10 @@ lentype(::Type{<:EarthCenteredInertial2D{Datum,D,L}}) where {Datum,D,L}=L
 coords₁.altitude==coord₂.altitude && coords₁.radius==coord₂.radius
 
 Random.rand(rng::Random.AbstractRNG,::Type{EarthCenteredInertial2D{Datum}}) where {Datum}=let
-  a=majoraxis(ellipsoid(Datum)) |> x-> uconvert(km,x) |> ustrip
+  majoraxis_earth=majoraxis(ellipsoid(Datum)) |> x-> uconvert(km,x) |> ustrip
   EarthCenteredInertial2D{Datum}(
     360*rand(rng),
-    a+800*abs(rand(rng))
+    majoraxis_earth+800*abs(rand(rng))
   )
 end
 Random.rand(rng::Random.AbstractRNG,::Type{EarthCenteredInertial2D})= rand(rng,ECI2D{WGS84Latest})
@@ -269,7 +269,7 @@ Random.rand(rng::Random.AbstractRNG,::Type{EarthCenteredInertial2D})= rand(rng,E
 
 
 #
-#  (1-e²) * tan(ϕ) = (1-e²) * tan(ϕ′)
+#  (1-squared_eccentricity_earth) * tan(ϕ) = (1-squared_eccentricity_earth) * tan(ϕ′)
 #
 #
 
@@ -277,16 +277,16 @@ Random.rand(rng::Random.AbstractRNG,::Type{EarthCenteredInertial2D})= rand(rng,E
 function Base.convert(::Type{EarthCenteredEarthFixed{Datum}},coords::LatLonAlt{Datum}) where {Datum}
   🌎  = ellipsoid(Datum)
   ϕ′  = ustrip(coords.lat)
-  e²  = oftype(ϕ′, eccentricity²(🌎))
-  a   = majoraxis(🌎) |> x-> uconvert(km,x) |> ustrip
-  N   = a / sqrt(1 - e² * sind(ϕ′)^2)
+  squared_eccentricity_earth  = oftype(ϕ′, eccentricity²(🌎))
+  majoraxis_earth   = majoraxis(🌎) |> x-> uconvert(km,x) |> ustrip
+  N   = majoraxis_earth / sqrt(1 - squared_eccentricity_earth * sind(ϕ′)^2)
 
   h   = coords.alt |> x-> uconvert(km,x) |> ustrip
 
   EarthCenteredEarthFixed{Datum}(
     (N+h)*cosd(ϕ′)*cosd(coords.lon),
     (N+h)*cosd(ϕ′)*sind(coords.lon),
-    (N*(1-e²)+h)*sind(ϕ′))
+    (N*(1-squared_eccentricity_earth)+h)*sind(ϕ′))
 end
 
 # Use Zhu Algorithm Closed Form
@@ -299,8 +299,8 @@ function Base.convert(::Type{LatLonAlt{Datum}},coords::EarthCenteredEarthFixed{D
   Z = coords.G |> x-> uconvert(km,x) |> ustrip
   λ = atand(Y/X)
 
-  e²  = oftype(λ, eccentricity²(🌎))
-  a   = majoraxis(🌎) |> x-> uconvert(km,x) |> ustrip
+  squared_eccentricity_earth  = oftype(λ, eccentricity²(🌎))
+  majoraxis_earth   = majoraxis(🌎) |> x-> uconvert(km,x) |> ustrip
   P   = hypot(X,Y)
 
   # initial value
@@ -309,13 +309,13 @@ function Base.convert(::Type{LatLonAlt{Datum}},coords::EarthCenteredEarthFixed{D
   @debug "ϕ′: $(ϕ′)"
 
   @inline function N(ϕ′)
-    a / sqrt(1-e²*sind(ϕ′)^2)
+    majoraxis_earth / sqrt(1-squared_eccentricity_earth*sind(ϕ′)^2)
   end
 
   N′  = N(ϕ′)
 
   while true
-    ϕ = atand(Z/P/(1-e²*N′*cosd(ϕ′)/P))
+    ϕ = atand(Z/P/(1-squared_eccentricity_earth*N′*cosd(ϕ′)/P))
     err=abs(ϕ-ϕ′)
     #@debug "ϕ: $(rad2deg(ϕ)), N: $N′, err: $(rad2deg(err))"
     ϕ′ = ϕ

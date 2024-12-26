@@ -11,7 +11,7 @@ comparison with numbers of type `T`. It is used in the
 source code in calls to the [`isapprox`](@ref) function:
 
 ```julia
-isapprox(a::T, b::T, atol=atol(T))
+isapprox(num1::T, num2::T, atol=atol(T))
 ```
 """
 atol(x) = atol(typeof(x))
@@ -60,37 +60,25 @@ struct Ellipsoid{T<:IEEEFloat}
   scale ::LinearMap
   unscale::LinearMap
 
-  @inline function Ellipsoid(a::T,b::T) where T
-    radius=Vec2{T}(a,b)
+  @inline function Ellipsoid(majoraxis_earth::T,minoraxis_earth::T) where T
+    radius=Vec2{T}(majoraxis_earth,minoraxis_earth)
     unscale=LinearMap(SDiagonal(radius))
     scale=inv(unscale)
     return new{T}(radius,scale,unscale)
   end
 end
-Ellipsoid(a::T) where T = Ellipsoid(a,a)
+Ellipsoid(majoraxis_earth::T) where T = Ellipsoid(majoraxis_earth,majoraxis_earth)
 
 struct Radius{T<:IEEEFloat}
-  a::T
-  b::T
-  c::T
+  PointA::Vec2{T}
+  PointB::Vec2{T}
 end
-Radius(r::Ray2D{T}) where T = Radius{T}(_coefficients(r)...)
+Radius(ray::Ray2D{T}) where T = Radius{T}(ray(0),ray(1))
 
 
-@inline _coefficients(r::Ray2D{T}) where T = _coefficients(r.origin...,r.direction...)
-@inline function _coefficients(x0::T,y0::T,dx::T,dy::T) where T
-  a = dy
-  b = dx
-  c = -dx * y0 - dy * x0
-  return (a,b,c)
 
-end
-
-
-#r=Ray2D(Vec2(-2.,343.),Vec2(-4.,2.43))
-
-direction(r::Ray2D)=r.direction
-origin(r::Ray2D)=r.origin
+get_direction(r::Ray2D)=r.direction
+get_origin(r::Ray2D)=r.origin
 
 
 
@@ -113,11 +101,11 @@ Calculate the distance from the unit circle to a ray or a point
 function distance_from_unit_circle(origin::Vec2{T},direction::Vec2{T})::T where T
   # it is supposed to be divided by the square of the direction, but assuming normalized
   #
-  # -1+x^2/a^2+y^2/b^2=0
+  # -1+x^2/majoraxis_earth^2+y^2/minoraxis_earth^2=0
   #
-  # C= x0^2/a^2+y0^2/b^2-1
-  # B= x0*dx/a^2+y0*dy/b^2
-  # A= dx^2/a^2+dy^2/b^2
+  # C= x0^2/majoraxis_earth^2+y0^2/minoraxis_earth^2-1
+  # B= x0*dx/majoraxis_earth^2+y0*dy/minoraxis_earth^2
+  # A= dx^2/majoraxis_earth^2+dy^2/minoraxis_earth^2
   #t^2+(mu-B/2)(-mu-B/2)*t+(mu^2-C)=0
   #t^2-(B/2)^2*t+(mu^2-C)=0
   C=origin.x*origin.x+origin.y*origin.y-1
@@ -126,14 +114,14 @@ function distance_from_unit_circle(origin::Vec2{T},direction::Vec2{T})::T where 
   C/=A
   halfB/=A
 
-  b=halfB*halfB-C
+  μ² =halfB*halfB-C
 
-  if b<=0
+  if μ²<=0
     return T(Inf)
   end
 
-  b_sqrt =sqrt(b)
-  return filter(x-> x>=0, [b_sqrt,-b_sqrt].+halfB) |> x-> reduce(min,x;init=Inf)
+  μ =sqrt(μ²)
+  return filter(x-> x>=0, [μ,-μ].+halfB) |> x-> reduce(min,x;init=Inf)
 
 end
 
@@ -143,17 +131,17 @@ end
 
 Calculate the distance from the unit circle to a ray or a point
 """
-function distance_from_ellipse(origin::Vec2{T},direction::Vec2{T};b::T=1.0,h::T=0.0)::T where T
+function distance_from_ellipse(origin::Vec2{T},direction::Vec2{T};minoraxis_earth::T=1.0,h::T=0.0)::T where T
   # it is supposed to be divided by the square of the direction, but assuming normalized
   #
-  # -1+x^2/a^2+y^2/b^2=0
+  # -1+x^2/majoraxis_earth^2+y^2/minoraxis_earth^2=0
   #
-  # C= x0^2/a^2+y0^2/b^2-1
-  # B= x0*dx/a^2+y0*dy/b^2
-  # A= dx^2/a^2+dy^2/b^2
+  # C= x0^2/majoraxis_earth^2+y0^2/minoraxis_earth^2-1
+  # B= x0*dx/majoraxis_earth^2+y0*dy/minoraxis_earth^2
+  # A= dx^2/majoraxis_earth^2+dy^2/minoraxis_earth^2
   #t^2+(mu-B/2)(-mu-B/2)*t+(mu^2-C)=0
   #t^2-(B/2)^2*t+(mu^2-C)=0
-  invb²=1/(b+h) |> x-> x*x
+  invb²=1/(minoraxis_earth+h) |> x-> x*x
   inva²=1/(1+h) |> x-> x*x
 
   scale=[inva²; invb²]
@@ -167,14 +155,14 @@ function distance_from_ellipse(origin::Vec2{T},direction::Vec2{T};b::T=1.0,h::T=
   C/=A
   halfB/=A
 
-  b=halfB*halfB-C
+  μ² =halfB*halfB-C
 
-  if b<=0
+  if μ²<=0
     return Inf
   end
 
-  b_sqrt =sqrt(b)
-  return filter(x-> x>=0, [b_sqrt,-b_sqrt].+halfB) |> x-> reduce(min,x;init=Inf)
+  μ =sqrt(μ²)
+  return filter(x-> x>=0, [μ,-μ].+halfB) |> x-> reduce(min,x;init=Inf)
 
 end
 
@@ -194,19 +182,16 @@ distance_from_unit_circle(ray::Ray2D{T}) where T = distance_from_unit_circle(ray
 
 
 """
-  distance_from_radii(origin::Vec2{T},direction::Vec2{T},a::T,b::T,c::T)::T where T
   distance_from_radii(ray::Ray2D{T},r::Radius{T})::T where T
 
-Calculate the distance from a ray to one of Earth Radii or from a line with coefficients a,b,c
+Calculate the distance from a ray to one of Earth Radii or from a line with coefficients coeff_a,coeff_b,coeff_c
+
+```math
+coeff_a*x+coeff_b*y+coeff_c=0
+```
 """
-function distance_from_radii(origin::Vec2{T},direction::Vec2{T},a::T,b::T,c::T) where T
-  # a*x+b*y+c=0
-  # (a*x0+b*y0+c)+t*(a*dx+b*dy)=0
-  # t=-(a*x0+b*y0+c)/(a*dx+b*dy)
-  t= -((a*origin.x+b*origin.y+c)/(a*direction.x+b*direction.y))
-  return t>=0 ? t : T(Inf)
-end
-distance_from_radii(ray::Ray2D{T},r::Radius{T}) where T = distance_from_radii(ray.origin,_normalize(ray.direction),r.a,r.b,r.c)
+distance_from_radii(ray::Ray2D{T},radius::Radius{T}) where T=
+  distance_from_segment(ray::Ray2D{T},radius.PointA,radius.PointB)
 
 
 """
@@ -215,7 +200,7 @@ distance_from_radii(ray::Ray2D{T},r::Radius{T}) where T = distance_from_radii(ra
 
 Calculate the distance from a segment AB to a segment CD
 """
-function distance_from_segment(A::Vec2{T},B::Vec2{T},C::Vec2{T},D::Vec2{T})::T where T
+@inline function distance_from_segment(A::Vec2{T},B::Vec2{T},C::Vec2{T},D::Vec2{T})::T where T
   # find intersection between segments AB,CD
   # Assume unit ray
   # A+t*(B-A) = p = C+s*(D-C)
@@ -234,10 +219,10 @@ function distance_from_segment(A::Vec2{T},B::Vec2{T},C::Vec2{T},D::Vec2{T})::T w
   # note: if it's collinear we will need to match the
   # fitting with the ellipse, so for our purposes collinear
   # is not intersecting
-  ((r>=2) && (M\y))[1] |> x-> (0<x<=1) ? x : T(Inf)
+  ((r>=2) && (M\y))[1] |> x-> (x>0) ? x : T(Inf)
 end
 
-distance_from_segment(ray::Ray2D{T},C::Vec2{T},D::Vec2{T}) where T = distance_from_segment(ray(0),ray(1),C,D)
+@inline distance_from_segment(ray::Ray2D{T},C::Vec2{T},D::Vec2{T}) where T = distance_from_segment(ray(0),ray(1),C,D)
 
 
 
@@ -278,10 +263,10 @@ IntersectionStyle(::Type{<:LevelRadiusIntersection}) = IsIntersection()
   @debug "advance level"
   @debug "scale: $scale"
   @debug "r: $r"
-  orig=scale(r.origin)
-  direc=scale(r.direction)
-  hyp_direct= hypot(direc...)
-  t=distance_from_unit_circle(orig,direc./hyp_direct) |> x-> x/hyp_direct
+  _orig=scale(r.origin)
+  _direc=scale(r.direction)
+  _hyp_direct= hypot(_direc...)
+  t=distance_from_unit_circle(_orig,_direc./_hyp_direct) |> x-> x/_hyp_direct
   #@debug "t_level: $t"
   #t<=1e-10 ? T(Inf) : t
   return t
@@ -294,23 +279,6 @@ end
   #t<=1e-10 ? T(Inf) : t
   return t
 end
-
-#=
-@inline function bend(r::Ray2D,t,ii)
-  neworigin=r(t)
-  h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(neworigin[1],neworigin[2])) |> x-> x.h
-  N=_normal_vector(neworigin...,h,e²) |> x-> x/hypot(x...)
-  a=-N⋅r.direction
-  b=ii.n²*(1-a^2)
-  newdir= if b≤1 # refract or reflect
-    ii.n*r.direction+(ii.n*a-sqrt(1-b))*N
-  else
-    r.direction-2*a*N
-  end
-  return Ray2D(neworigin,newdir)
-end
-=#
-
 
 abstract type AbstractInterface{T<:IEEEFloat} end
 
@@ -331,50 +299,83 @@ Interface(;n::T=1.0,h::T=T(0.0)) where {T<:IEEEFloat} = Interface{T}(h,n*n,n)
 const SHIFTORIGIN=1e-8
 
 @inline function _bend_initialize(ray::Ray2D,t::T, n₀::T,n₁::T) where T
-  neworigin=ray(t)
-  direction=ray.direction
+  _neworigin=ray(t)
+  _direction=ray.direction
   n₀₁=n₀/n₁
-  return (neworigin,direction,n₀₁,n₀₁*n₀/n₁)
+  return (_neworigin,_direction,n₀₁,n₀₁*n₀/n₁)
 end
 
 @inline function _bend_ellipse(ray::Ray2D,t::T, n₀::T,n₁::T, h::T=T(0), outward=1.0) where T
-  e²=eccentricity²(ellipsoid(NormalizeEarth))
+  squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizeEarth))
   ## shift the origin to avoidnumerical issues
 
-  (neworigin,direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
-  N=_normal_vector(neworigin...,h,e²) |> x-> x/hypot(x...).*outward
-  ray_out,isReflected=_bend_common(neworigin,direction,N,n₀₁,n₀₁²)
+  (_neworigin,_direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
+  N=_normal_vector(_neworigin...,h,squared_eccentricity_earth).*outward |> x-> x/hypot(x...)
+  ray_out,isReflected=_bend_common(_neworigin,_direction,N,n₀₁,n₀₁²)
+  @info "h: $h, n₀: $n₀, n₁: $n₁"
+  @info "N: $(hypot(N...)) $(atand(-N[2]/N[1]))"
+  @info "direction: $(hypot(_direction...)) $(atand(-_direction[2]/_direction[1])),"
 
-
-  isRising= acosd(-N⋅direction)>90
+  sinθ₀= sqrt(1-(-N⋅_direction)^2)
+  sinθ₁= sqrt(1-(-N⋅get_direction(ray_out))^2)
+  @debug  "sinθ₀= $(sinθ₀), sinθ₁= $(sinθ₁)"
+  @debug  "@debug (asind(sinθ₀)), θ₁= $(asind(sinθ₁))"
+  @debug "n₀= $(n₀), n₁= $(n₁)"
+  isRising= acosd(-N⋅_direction)>90
   @debug "isRising: $isRising, isReflected: $isReflected"
   return (ray_out,isReflected,isRising)
 end
 
 
 @inline function _bend_radii(ray::Ray2D,t::T, n₀::T,n₁::T, h::T=T(0), outward=1.0) where T
-  e²=eccentricity²(ellipsoid(NormalizeEarth))
-  (neworigin,direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
-  N=_tangent_vector(neworigin...,h,e²) |> x-> x/hypot(x...).*outward
-  ray_out,isReflected=_bend_common(neworigin,direction,N,n₀₁,n₀₁²)
-  isRising= acosd(-N⋅direction) #|> x-> ifelse(abs(x)==90,x,rem(x,180,RoundNearest) )<0
-  @debug "θ: $isRising"
-  isRising= isRising>90
+  squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizeEarth))
+  (_neworigin,_direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
+  N=_tangent_vector(_neworigin...,h,squared_eccentricity_earth).*outward |> x-> x/hypot(x...)
+  ray_out,isReflected=_bend_common(_neworigin,_direction,N,n₀₁,n₀₁²)
+  isRising= acosd(-N⋅_direction) #|> x-> ifelse(abs(x)==90,x,rem(x,180,RoundNearest) )<0
+  @debug "N: $(hypot(N...)) $(atand(-N[2]/N[1])), direction: $(hypot(_direction...)) $(atand(-_direction[2]/_direction[1])),"
+  @debug "ray_out: $ray_out"
+  sinθ₀= sqrt(1-(-N⋅_direction)^2)
+  sinθ₁= sqrt(1-(-N⋅get_direction(ray_out))^2)
+  @debug "sinθ₀= $(sinθ₀), sinθ₁= $(sinθ₁)"
+  @debug "θ₀= $(asind(sinθ₀)), θ₁= $(asind(sinθ₁))"
+  @debug "n₀= $(n₀), n₁= $(n₁)"
   @debug "isRising: $isRising, isReflected: $isReflected"
   return (ray_out,isReflected,isRising)
 end
 
+const OUTWARD_NORMAL=1.0
+const INWARD_NORMAL=-1.0
+
 
 #TopLevelIntersection -1
-@inline bend(::TopIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)    = _bend_ellipse(ray,t,n₀,n₁,h,-1.0) |> x-> (x[1],x[2])
+#--------------------
+#         |  n
+#         V
+####################
+@inline bend(::TopIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)    = _bend_ellipse(ray,t,n₀,n₁,h,INWARD_NORMAL) |> x-> (x[1],x[2])
 #RightRadiusIntersection -1
-@inline bend(::RightIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)  = _bend_radii(ray,t,n₀,n₁,0.0,1.0)  |> x-> (x[1],x[2])
+#
+#      n    |
+# <---------|
+#           |
+####################
+@inline bend(::RightIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)  = _bend_radii(ray,t,n₀,n₁,0.0,INWARD_NORMAL)  |> x-> (x[1],x[2])
 
 
 #BottomLevelIntersection 1
-@inline bend(::BottomIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) = _bend_ellipse(ray,t,n₀,n₁,h,1.0)  |> x-> (x[1],x[2])
+#         ^
+#         |  n
+#--------------------
+####################
+
+@inline bend(::BottomIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) = _bend_ellipse(ray,t,n₀,n₁,h,OUTWARD_NORMAL)  |> x-> (x[1],x[2])
 #LeftRadiusIntersection 1
-@inline bend(::LeftIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)   = _bend_radii(ray,t,n₀,n₁,0.0,-1.0)  |> x-> (x[1],x[2])
+# |
+# |----------> n
+# |
+#####################
+@inline bend(::LeftIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)   = _bend_radii(ray,t,n₀,n₁,0.0,OUTWARD_NORMAL)  |> x-> (x[1],x[2])
 
 #LeftTop 1 -1
 @inline bend(::LeftTopIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)=
@@ -415,21 +416,20 @@ end
 
 
 # return both the ray
-@inline function _bend_common(origin::Vec2{T},direction::Vec2{T},
+@inline function _bend_common(origin::Vec2{T},_direction::Vec2{T},
   N::Vec2{T},n₀₁::T,n₀₁²::T) where T
 
   # Base condition
   isReflected=false
 
-  a=-N⋅direction
+  cosθₙ=-N⋅_direction
 
-  b=n₀₁²*(1-a^2)
-  @debug "b: $b, θ: $(acosd(a))"
-  @debug "θ: $(acosd(a)),sinθ: $(a), n₀₁²: $(n₀₁²)"
-  newdir= if b≤1 # refract or reflect
-    n₀₁*direction+(n₀₁*a-sqrt(1-b))*N
+  sinθₙ² =n₀₁²*(1-cosθₙ^2)
+
+  newdir= if sinθₙ²≤1 # refract or reflect
+    n₀₁*_direction+(n₀₁*cosθₙ-sqrt(1-sinθₙ²))*N
   else
-    direction-2*a*N
+    _direction-2*cosθₙ*N
     isReflected=true
     @debug "is reflected"
     #readline()
@@ -437,18 +437,26 @@ end
   # SHIFT ORIGIN TO AVOID NUMERICAL ISSUES
   return Ray2D(origin+newdir*SHIFTORIGIN,newdir),isReflected
 end
-
-@inline _normal_vector(x0,y0,h,e²)=Vec2(x0/(1+h)^2,y0/(sqrt(1-e²)+h)^2) |> x->x/hypot(x...)
-@inline _tangent_vector(args...)=_normal_vector(args...) |> x-> Vec2(-x.y,x.x)
+###################################################################################################
+# VISUAL REPRESENTATION OF TANGENT AND NORMAL VECTORS
+###################################################################################################
+#          n=(-nx,ny), t=(ny,nx)
+#           ^  n                                                                         ^ t(0,1)
+#           | (0,1)                                n \    / t                    n(-1,0) |
+#           |                              (-0.5,1)   \  /   (1,0.5)               <-----|
+#           -------------> t (1,0)                     \/
+###################################################################################################
+@inline _normal_vector(x0,y0,h,squared_eccentricity_earth)=Vec2(x0/(1+h)^2,y0/(sqrt(1-squared_eccentricity_earth)+h)^2) |> x->x/hypot(x...)
+@inline _tangent_vector(args...)=_normal_vector(args...) |> x-> Vec2(x.y,-x.x)
 # Create Rays from the orbit
 
 
 function create_rays(datum::Datum,orb::Orbit) where Datum
-  e²=eccentricity²(ellipsoid(datum))
+  squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
   (w,z)=(orb.w,orb.z)
-  (nx,ny)=_normal_vector(w,z,0,e²)
+  (nx,ny)=-_normal_vector(w,z,0,squared_eccentricity_earth)
   #angle computed with respect to the tangent plane
-  (tx,ty)=(-ny,-nx)
+  (tx,ty)=(ny,-nx)
   angle= orb.ang
   @inline _rotation_matrix(θ)= SMatrix{2,2}([cosd(θ) sind(θ);-sind(θ) cosd(θ)] )
   return Ray2D(Vec2(w,z),_rotation_matrix(-angle)*Vec2(tx,ty))
@@ -457,144 +465,199 @@ end
 create_rays(orb::Orbit)=create_rays(NormalizeEarth,orb)
 
 
-function getIntersectionObjects(lla,ecef,b::T) where T
+@inline function _scale_earth_by_h(datum::Datum,h::T) where {Datum,T<:Real}
+Ellipsoid(
+  majoraxis(ellipsoid(datum))+h,
+  minoraxis(ellipsoid(datum))+h
+)
+end
+
+@inline _scale_earth_from_h(h::T) where T<:Real=_scale_earth_by_h(NormalizeEarth,h)
+
+@inline function _create_radii_from_θ(datum::Datum, θ::T) where {Datum,T<:Real}
+  eccentricity_squared= eccentricity²(ellipsoid(datum))
+  origin=convert(ECEF2D{datum},LLA2D{datum}(0.,θ)) |> x-> Vec2([x.w,x.z])
+  direction=_normal_vector(origin...,0,eccentricity_squared)
+  return Radius(Ray2D(origin,direction))
+end
+@inline _create_radii_from_θ(θ::T) where T<:Real=_create_radii_from_θ(NormalizeEarth,θ)
+
+create_radii_from_θ(datum::Datum,θ::T) where {Datum,T<:Real}=_create_radii_from_θ(datum,θ)
+create_radii_from_θ(θ::T) where T<:Real=_create_radii_from_θ(θ)
+scale_earth_by_h(datum::Datum,h::T) where {Datum,T<:Real}=_scale_earth_by_h(datum,h)
+scale_earth_by_h(h::T) where T<:Real=_scale_earth_by_h(NormalizeEarth,h)
+
+#########################
+function getIntersectionObjects(lla::AbstractArray{L}) where L<:LLA2D{Datum} where Datum
   (nlevels,nradii)=size(lla)
   h_levels = Vector{Float64}(undef,nlevels)
   scale_levels = Vector{Ellipsoid{Float64}}(undef,nlevels)
   θ_radii  = Vector{Float64}(undef,nradii)
   line_radii = Vector{Radius{Float64}}(undef,nradii)
-  invb²=1/(b*b)
-  [
-    let
-      h=lla[i,1][1]
-      h_levels[i,1]=h
-      scale_levels[i]=Ellipsoid(1.0+h,b+h)
-    end
-    for i in axes(lla,1)
-  ]
-  [
-    let
-      origin=Vec2(ecef[end,j][1],ecef[end,j][2])
-      direction=Vec2(origin.x,origin.y*invb²)
-      θ_radii[j]=lla[end,j][2]
-      line_radii[j]=Radius(Ray2D(origin,direction))
-    end
-    for j in axes(ecef,2)
-  ]
+
+  for i in axes(lla,1)
+    h_levels[i]=lla[i,1].h
+    scale_levels[i]=_scale_earth_by_h(Datum,lla[i,1].h)
+  end
+
+  for j in axes(lla,2)
+    θ_radii[j]=lla[1,j].θ
+    line_radii[j]=_create_radii_from_θ(Datum,lla[1,j].θ)
+  end
+
   return h_levels,StructArray(scale_levels).scale,SemiCircularArray(θ_radii),SemiCircularArray(line_radii)
 end
 
+const NEARBY_LEFT_INDEX=+1
+const NEARBY_RIGHT_INDEX=-1
+const NEARBY_TOP_INDEX=-1
+const NEARBY_BOTTOM_INDEX=+1
+function _intersection_type(lr::LR,position,wedge_index,h_levels,refractive_map) where LR<:RadiusIntersection
+
+  # left is to the left +1 and right is to the right -1
+  position_interface_index2= lr==LeftIntersection() ? wedge_index[2]+NEARBY_LEFT_INDEX : wedge_index[2]+NEARBY_RIGHT_INDEX
+
+  index=(wedge_index[1],position_interface_index2)
+  @debug "position: $position, index: $index"
+  h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(position...)) |> x-> x.h
+  n₁=refractive_map[index...]
+  # if the last radius was ABOVE the maximum level of stratification,
+  # then the ray is in free space and you stop the computation
+  # TO DO maybe find a better breaking condition
+  # like checking the altitude of the ray outside instead of basing it on
+  # the index
+  @debug "h: $h, h_level_max: $(h_levels[1])"
+  index=ifelse(h<=h_levels[1],index,(0,index[2]))
+  (n₁,index,h)
+end
+
+
+
+
+function _intersection_type(tb::TB,position,wedge_index,h_levels,refractive_map) where TB<:LevelIntersection
+  ##############################################
+  # The -1 is because the number of wedges is one less the number of levels
+  #
+  #     ------------- h[1]
+  #         n[1]
+  #     ------------- h[2]
+  #         n[2]
+  #     ------------- h[3]
+  ##############################################
+  nlevels=length(h_levels)-1
+  ##############################################
+  # bottom is to the top +1 and top is to the top -1
+  # it is confusing but the reason is that the altitude is ordered from the top to the bottom
+
+  position_interface_index1= tb==BottomIntersection() ? wedge_index[1]+NEARBY_BOTTOM_INDEX : wedge_index[1]+NEARBY_TOP_INDEX
+  # this is important, since the altitude uses the h_levels
+  # and the h levels are one less than the number of levels
+  # the first index coincide with the highest wedge altitude TOP
+  # and i+1 index coincide with the lowest wedge altitude BOTTOM
+  # since the index uses was i+1 for bottom and i-1 for TOP
+  # i need to ADD +1 to get the correct altitude for the TOP
+  # and just use the index for the top
+
+  index=(position_interface_index1,wedge_index[2])
+
+  h= tb==BottomIntersection() ? h_levels[position_interface_index1] : h_levels[position_interface_index1+1]
+
+  # the altitude is not circular and it is used to stop the computation of ray tracing
+  # thus, the extremes are not considered
+  if position_interface_index1<1  # free space
+    n₁=1.0
+  elseif position_interface_index1>=nlevels  # ground full reflection
+    n₁=Inf
+  else            # atmosphere
+    n₁=refractive_map[index...]
+  end
+
+   (n₁,index,h)
+end
+
+const DEBUG_INTERSECTION=Ref{Int}(0)
+setDebugIntersection(x::Int)=DEBUG_INTERSECTION[]=x
+setDebugIntersection()=DEBUG_INTERSECTION[]=0
+getDebugIntersection()=DEBUG_INTERSECTION[]
+
+## USEFUL CONSTANTS FOR READABILITY AND AVOIDING MISTAKES
+const LEFT_RADIUS_INDEX=1
+const RIGHT_RADIUS_INDEX=0
+const BOTTOM_LEVEL_INDEX=1
+const TOP_LEVEL_INDEX=0
+######################################################
 @inline function new_intersection(ray::Ray2D, # ray
-  wedge_index=wedge_index; # wedge index
-  refractive_index_map=refractive, # map of refractive index
-  h_levels=h_levels, # levels for i
-  θ_radii=θ_radii, # radii angles for j
-  scale_levels=scale_levels, # scaling mapping to unit circle
-  line_radii=line_radii, # line radii
-  tangent_quote=tangent_quote, # tangent quote
-  register=register,
+  wedge_index; # wedge index
+  refractive_map, # map of refractive index
+  h_levels, # levels for i
+  θ_radii, # radii angles for j
+  scale_levels, # scaling mapping to unit circle
+  line_radii, # line radii
+  tangent_quote, # tangent quote
+  register,
   #for debug
   previous_intersection=nothing) # register
 
-  nlevels=size(refractive_index_map,1) #number of levels to check for the bottom intersection
+  ###########################
+  n₀= refractive_map[wedge_index...]
+  ###########################
+  previous_index=wedge_index
+  ###########################
 
-  n₀= refractive_index_map[wedge_index...]
-  @debug "n₀: $n₀"
-  @debug "wedge_index: $(wedge_index)"
-  @debug "line_radii: $(line_radii[wedge_index[2]])"
-  @debug "scale_levels: $(scale_levels[wedge_index[1]+1])"
-  # find the next intersection
-  # for simplicity, I only need to check only Left and Bottom
-  @debug "LeftIntersection"
-#############################
-previous_index=wedge_index
-############################
-
-  t_radius_l=advance(LeftIntersection(),ray,line_radii[wedge_index[2]])
-  t_radius_r=advance(RightIntersection(),ray,line_radii[wedge_index[2]+1])
+  t_radius_l=advance(LeftIntersection(),ray,line_radii[wedge_index[2]+LEFT_RADIUS_INDEX])
+  t_radius_r=advance(RightIntersection(),ray,line_radii[wedge_index[2]+RIGHT_RADIUS_INDEX])
 
   t_radius= min(t_radius_l,t_radius_r)
-  leftright= t_radius_r>t_radius_l ? 1 : -1 # left or right
+  @debug "t_radius: $t_radius,t_left:$t_radius_l,t_right: $t_radius_r"
+  leftright= t_radius_l<t_radius_r ? LeftIntersection() : RightIntersection() # left or right
   @debug "BottomIntersection"
-  t_level_b=advance(BottomIntersection(),ray,scale_levels[wedge_index[1]+1])
-  t_level_t=advance(TopIntersection(),ray,scale_levels[wedge_index[1]])
+  t_level_b=advance(BottomIntersection(),ray,scale_levels[wedge_index[1]+BOTTOM_LEVEL_INDEX])
+  t_level_t=advance(TopIntersection(),ray,scale_levels[wedge_index[1]+TOP_LEVEL_INDEX])
   t_level= min(t_level_b,t_level_t)
-  bottomtop= t_level_b<t_level_t ? 1 : -1 # bottom or top
-
-  if isinf(t_level)
-    @debug "level failed"
-    @debug  ray
-    @debug wedge_index[1]+1,scale_levels[wedge_index[1]+1]
-    @debug wedge_index[1],scale_levels[wedge_index[1]]
-    readline()
-  end
-
-  @debug "t_level: $t_level,$t_level_b,$t_level_t, t_radius: $t_radius,$t_radius_l,$t_radius_r"
-  @debug "Δt: $(t_radius-t_level)"
-
-  Δt=(t_radius-t_level)
-
-  @inline function _radius_intersection(ray::Ray2D,t,wedge_index,nlevels,leftright::Int=1)
-    whatMatch= if leftright==1
-      LeftIntersection()
-    else
-      RightIntersection()
-    end
-    index=(wedge_index[1],wedge_index[2]+leftright)
-    h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(ray(t)...)) |> x-> x.h
-    @debug "$whatMatch input: $wedge_index, output: $index, h: $h"
-    @debug whatMatch
-    (whatMatch,
-    refractive_index_map[index...],
-    index,
-    h
-    )
-  end
-
-  @inline function _ellipse_intersection(ray::Ray2D,t,wedge_index,nlevels,bottomtop::Int=1)
-    whatMatch= if bottomtop==1
-      BottomIntersection()
-    else
-      TopIntersection()
-    end
-
-    hindex=wedge_index[1]+bottomtop
-    index=(hindex,wedge_index[2])
-
-    @debug "bottomtop: $bottomtop"
-    @debug "whatMatch: $whatMatch"
-    @debug "index: $index"
-    @debug "hindex: $hindex"
-    @debug "nlevels: $nlevels"
-    if hindex<1  # free space
-      n₁=1.0
-    elseif hindex>=nlevels  # ground full reflection
-      n₁=Inf
-    else            # atmosphere
-      n₁=refractive_index_map[index...]
-    end
-    h= if whatMatch isa BottomIntersection
-      h_levels[wedge_index[1]+1]             # level of the bottom intersection
-    else # whatMatch isa TopIntersection
-      h_levels[wedge_index[1]]               # level of the top intersection
-    end
-    @debug "$whatMatch input: $wedge_index, output: $index, h: $h"
-    (whatMatch,n₁,index,h)
-  end
+  bottomtop= t_level_b<t_level_t ? BottomIntersection() : TopIntersection() # bottom or top
 
 
-  (t,(whatMatch,n₁,index,h))= if Δt<0
-    (t_radius,_radius_intersection(ray,t_radius,wedge_index,nlevels,leftright))
+  debug_intesection=getDebugIntersection()
+  @debug "DEBUG_INTERSECTION: $debug_intesection"
+  if debug_intesection==0
+    #######################
+    #REAL
+    #######################
+    radius_or_level=t_radius<t_level ? leftright : bottomtop
+    t_real= min(t_radius,t_level)
+  elseif debug_intesection==1
+    #######################
+    # DEBUG ONLY RADII
+    #######################
+    @info "DEBUG ONLY RADII"
+    radius_or_level= leftright #t_radius<t_level ? leftright : bottomtop
+    t_real= t_radius #min(t_radius,t_level)
+  elseif debug_intesection==2
+    #######################
+    # DEBUG ONLY LEVELS
+    #######################
+    @info "DEBUG ONLY LEVELS"
+    radius_or_level= bottomtop
+    t_real= t_level
+    #######################
   else
-    (t_level,_ellipse_intersection(ray,t_level,wedge_index,nlevels,bottomtop))
+    throw(ArgumentError("Invalid debug intersection, use setDebugIntersection(x) x=0,1,2 \n 0: Real, 1: Debug only radii, 2: Debug only levels"))
   end
+  @debug "radius_or_level: $radius_or_level"
+  @debug "t_real: $t_real"
+  @debug "t_level: $t_level"
+  @debug "t_radius: $t_radius"
 
-  n₀=refractive_index_map[wedge_index...]
-  @debug "t: $t, n₀: $n₀, n₁: $n₁, h: $h, whatMatch: $whatMatch, index: $index"
 
-  b,isReflected = bend(whatMatch,ray,t;n₀=n₀,n₁=n₁,h=h)
+  (n₁,index,h)=_intersection_type(radius_or_level,ray(t_real),wedge_index,h_levels,refractive_map)
+
+
+  n₀=refractive_map[wedge_index...]
+  @debug "t: $t_real, n₀: $n₀, n₁: $n₁, h: $h, whatMatch: $radius_or_level, index: $index"
+
+  ray_out,isReflected = bend(radius_or_level,ray,t_real;n₀=n₀,n₁=n₁,h=h)
   index= isReflected ? wedge_index : index
   # condition to stop ray tracing
-  target = 1<index[1]<nlevels
-  return (b,target,h,index,whatMatch)
+  target = 1<index[1]<(length(h_levels)-1)
+  return (ray_out,target,h,index,radius_or_level)
 end

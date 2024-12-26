@@ -35,8 +35,8 @@ LocalAtmosphereECEF2D(pressure::T,temperature::T,w::T,z::T) where T = LocalAtmos
 LocalAtmosphere2D(pressure::T,temperature::T,h::T,θ::T) where T = LocalAtmosphereLLA2D(pressure,temperature,h,θ)
 
 
-@inline function _normalize_ellipse!(h::A,a::T) where A<:AbstractArray{T} where T
-  h./=a
+@inline function _normalize_ellipse!(h::A,majoraxis_earth::T) where A<:AbstractArray{T} where T
+  h./=majoraxis_earth
   return nothing
 end
 
@@ -70,13 +70,13 @@ function read_local_atmosphere(::Type{T},folder::String;
   x-> uconvert.(u"Pa",x.*units_pressure) |> x-> ustrip.(x) |>
   x-> reshape(x,(length(h),length(θ)))
 
-  a=majoraxis(ellipsoid(datum)) |> x-> uconvert(km,x) |> ustrip
-  e²=eccentricity²(ellipsoid(datum))
+  majoraxis_earth=majoraxis(ellipsoid(datum)) |> x-> uconvert(km,x) |> ustrip
+  squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
 
   if normalize
-    @debug "a: $a, h: $h"
-    _normalize_ellipse!(h,a)
-    setNormalizedEarth(e²)
+    @debug "majoraxis_earth: $majoraxis_earth, h: $h"
+    _normalize_ellipse!(h,majoraxis_earth)
+    setNormalizedEarth(squared_eccentricity_earth)
     datum=NormalizeEarth
 end
 
@@ -95,8 +95,8 @@ end
 
 read_local_atmosphere(folder::String;kwargs...)=read_local_atmosphere(Float64,folder;kwargs...)
 
-@inline function _convertellipse2cartesian(θ::T,h::T,a::T,e²::T)::NTuple{2,T} where T
-  N=a/sqrt(1+e²*sind(θ)*sind(θ))
+@inline function _convertellipse2cartesian(θ::T,h::T,majoraxis_earth::T,squared_eccentricity_earth::T)::NTuple{2,T} where T
+  N=majoraxis_earth/sqrt(1+squared_eccentricity_earth*sind(θ)*sind(θ))
   return (N+h)*cosd(θ),(N+h)*sind(θ)
 end
 
@@ -239,7 +239,7 @@ function read_orbit(::Type{T},file::String) where T
     x-> (x,length(x),parse.(Int,lines[x.+6]))|>
     x-> (x[2],x[3],
     let
-      [(a+2+6:a+1+6+b) for (a,b) in zip(x[1],x[3])]
+      [(init_seq+2+6:init_seq+1+6+len_seq) for (init_seq,len_seq) in zip(x[1],x[3])]
     end)
 
     orb=Matrix{Orbit{T}}(undef,nseq,maximum(mgeom))
@@ -256,8 +256,8 @@ end
 
 read_orbit(file::String)=read_orbit(Float64,file)
 
-normalize_orbit(datum::Datum,orbit::O) where {Datum,O<:Orbit{T}} where T = majoraxis(ellipsoid(datum)) |> a-> uconvert(km,a) |> ustrip|>
-a-> Orbit(orbit.z/a,orbit.w/a,orbit.ang,orbit.h/a,orbit.other)
+normalize_orbit(datum::Datum,orbit::O) where {Datum,O<:Orbit{T}} where T = majoraxis(ellipsoid(datum)) |> _majoraxis_earth-> uconvert(km,_majoraxis_earth) |> ustrip|>
+_majoraxis_earth-> Orbit(orbit.z/_majoraxis_earth,orbit.w/_majoraxis_earth,orbit.ang,orbit.h/_majoraxis_earth,orbit.other)
 normalize_orbit(orbit::O) where O<:Orbit{T} where T = normalize_orbit(WGS84Latest,orbit)
 
 struct ECEF2D{Datum,T<:IEEEFloat}
@@ -306,17 +306,17 @@ CoordRefSystems.ellipsoid(datum::Datum) = ellipsoid(datum)
 
 function getNormalizedEarth()
   NE=ellipsoid(NormalizeEarth)
-  @debug "a: $(majoraxis(NE)), b: $(minoraxis(NE))"
+  @debug "majoraxis_earth: $(majoraxis(NE)), minoraxis_earth: $(minoraxis(NE))"
   @debug "flattening: $(flattening(NE)), eccentricity: $(eccentricity(NE))"
   @debug "eccentricity²: $(eccentricity²(NE))"
   return _NormalizedEarth🌎[]
 end
 
 
-function setNormalizedEarth(e²::T) where T<:IEEEFloat
-  @assert(0<=(e²)<=1, "The eccentricity squared must be between 0 and 1")
-  _NormalizedEarth🌎[]=ellipsfrome²(e²)
-  @debug "Normalized Earth set to e²=$e²"
+function setNormalizedEarth(squared_eccentricity_earth::T) where T<:IEEEFloat
+  @assert(0<=(squared_eccentricity_earth)<=1, "The eccentricity squared must be between 0 and 1")
+  _NormalizedEarth🌎[]=ellipsfrome²(squared_eccentricity_earth)
+  @debug "Normalized Earth set to squared_eccentricity_earth=$squared_eccentricity_earth"
   getNormalizedEarth()
   return nothing
 end
@@ -334,32 +334,40 @@ eccentricity(ellipsoid(NormalizeEarth))
 
 function Base.convert(::Type{ECEF2D{Datum}},coords::LLA2D{Datum,T}) where {T,Datum}
   🌎 = ellipsoid(Datum)
-  a = majoraxis(🌎) |> ustrip
-  e²= eccentricity²(🌎)
+  majoraxis_earth = majoraxis(🌎) |> ustrip
+  squared_eccentricity_earth= eccentricity²(🌎)
   h=ustrip(coords.h)
   θ=ustrip(coords.θ)
   sinθ=sind(θ)
   cosθ=cosd(θ)
-  N=a/sqrt(1-e²*sinθ*sinθ)
+  N=majoraxis_earth/sqrt(1-squared_eccentricity_earth*sinθ*sinθ)
   w=(N+h)*cosθ
-  z=(N*(1-e²)+h)*sinθ
+  z=(N*(1-squared_eccentricity_earth)+h)*sinθ
   return ECEF2D{Datum}(w,z)
 end
 
 function Base.convert(::Type{LLA2D{Datum}},coords::ECEF2D{Datum,T}) where {T,Datum}
   🌎 = ellipsoid(Datum)
-  a = T(ustrip(majoraxis(🌎)))
-  b = T(ustrip(minoraxis(🌎)))
-  e² = T(eccentricity²(🌎))
+  majoraxis_earth = T(ustrip(majoraxis(🌎)))
+  minoraxis_earth = T(ustrip(minoraxis(🌎)))
+  squared_eccentricity_earth = T(eccentricity²(🌎))
   z = ustrip(coords.z)
   p = ustrip(coords.w)
-  e′² = e² / (1 - e²)
-  ψ = atand(a * z, b * p)
-  ϕ = mod1(atand(z + b * e′² * sind(ψ)^3, p - a * e² * cosd(ψ)^3),360)
-  #ϕ = mod1(atand(z + b * e′² * sind(ϕ)^3, p - a * e² * cosd(ϕ)^3),360)
-  #ϕ = mod1(atand(z + b * e′² * sind(ϕ)^3, p - a * e² * cosd(ϕ)^3),360)
+  e′² = squared_eccentricity_earth / (1 - squared_eccentricity_earth)
+  ψ = atand(majoraxis_earth * z, minoraxis_earth * p)
+  ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ψ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ψ)^3),360)
+  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
+  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
 
-  N = a / sqrt(1 - e² * sind(ϕ)^2)
-  h = p / cosd(ϕ) - N
+  N = majoraxis_earth / sqrt(1 - squared_eccentricity_earth * sind(ϕ)^2)
+  ## Fix for the condition cosθ=0, in that case subtract the
+  cosθ=cosd(ϕ)
+
+  if cosθ≠0
+    h = p/cosθ - N
+  else
+    h =abs(z)-minoraxis_earth
+  end
+
   return LLA2D{Datum}(h,ϕ)
 end

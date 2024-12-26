@@ -6,6 +6,43 @@ using Base:IEEEFloat
 using LinearAlgebra: ⋅
 using Unitful: ustrip
 using Makie,WGLMakie
+
+
+
+function initialize_raytracing_plot(h_levels,θ_radii)
+  fig=Figure(size=(600,800))
+  ax=Axis(fig[1:2,1],
+  xlabel="w",
+  ylabel="z"
+  )
+
+    ax2a=Axis(fig[3,1][1,1],
+    xlabel="Altitude (km)",
+    ylabel="Refractive Index"
+    )
+    ax2b=Axis(fig[3,1][1,2],
+    xlabel="Iteraction",
+    ylabel="Altitude (km)",
+    )
+    #scatter!(ax,hhh.*a)
+    #scatter!(ax,allintersections)
+    for h in h_levels
+      lines!(ax,[let
+        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
+        x-> (x.w,x.z)
+        end
+        for tt in LinRange(0,361,1000)])
+    end
+    for tt in θ_radii
+      lines!(ax,[let
+        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
+        x-> (x.w,x.z)
+        end
+        for h in h_levels])
+    end
+  return (fig,ax,ax2a,ax2b)
+end
+
 ########
 # Read atmosphere
 atmosphere=read_local_atmosphere("./data_atm/INP_FILES")
@@ -78,9 +115,9 @@ x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
 x-> [parse(Float64,y) for y in x] #.+90.0
 
 # normalizetion factor for h_knots
-a=majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(km,x) |> ustrip
-e²=eccentricity²(ellipsoid(NormalizeEarth))
-b=minoraxis(ellipsoid(NormalizeEarth))
+majoraxis_earth=majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(km,x) |> ustrip
+squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizeEarth))
+reduced_minoraxis_earth=minoraxis(ellipsoid(NormalizeEarth))
 
 
 h_knots="0.000000000000000E+000   3.60000000000000        3.80000000000000
@@ -116,10 +153,18 @@ h_knots="0.000000000000000E+000   3.60000000000000        3.80000000000000
 37.0000000000000        44.0000000000000        68.0000000000000
 68.1500000000000    "  |> x-> split(x,"\n") |> x-> join(x," ") |>
 x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
-x-> [parse(Float64,y) for y in x]./a
+x-> [parse(Float64,y) for y in x]./majoraxis_earth
 # Generate discretized atmosphere using the knots
+#NoAtmosphere()
+pressure_c,temperature_c,refractive_c,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
+#setModel(NoAtmosphere())
 
-pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
+#pressure_n,temperature_n,refractive_n,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
+
+#extrema(refractive_c-refractive_n)
+pressure_c,temperature_c,refractive_c,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
+
+pressure,temperature,refractive=pressure_c,temperature_c,refractive_c
 #pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Ciddor(),interpolation_pressure=LinearPressure())
 #pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Mathar4(),interpolation_pressure=LinearPressure())
 
@@ -144,26 +189,23 @@ refractive=refractive[:,idx270:end+idx270-1]
 h_knots=sort(h_knots;rev=true)
 ##########################################
 lla2=SemiCircularMatrix([let
-      LLA2D{NormalizeEarth}(h,θ) |> x-> (x.h,x.θ)
+      LLA2D{NormalizeEarth}(h,θ) #|> x-> (x.h,x.θ)
     end
     for h in
       h_knots,θ in θ_knots])  # get coordinates in LLA
-ecef2=SemiCircularMatrix([let
-convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,θ)) |> x-> (x.z,x.w)
-end
-for h in h_knots,θ in θ_knots])  # get coordinates in LLA
+
+
 ##############################################################################
 ##################################################
 # get coordinates in LLA and ECEF
 lla2=StructArray(lla2)
-ecef2=StructArray(ecef2)
 # create the intersection objects (radii and levels)
 (
   h_levels,
   scale_levels,
   θ_radii,
   line_radii
-)=getIntersectionObjects(lla2,ecef2,b);
+)=getIntersectionObjects(lla2);
 
 # create rays
 orbit=read_orbit("./data_atm/INP_FILES/orbit.dat") |> # read the orbit file
@@ -180,25 +222,32 @@ function find_first_intersection_ellipse(ray::Ray2D, # ray
 
   # index of outmost level (to be sure it is sorted in the right order)
   ii=findfirst(h_levels.==maximum(h_levels))
+  @debug "ii=$ii"
   # find intersection point
   t_intersection=advance(BottomIntersection(),ray,scale_levels[ii])
-  @info "t_intersection=$t_intersection"
+  @debug "t_intersection=$t_intersection"
   # find j on ellipse
+  #θ=geocentric_to_geodesic_θ(ray(t_intersection)...)
+
   θ=ray(t_intersection) |> x-> atand(x[2],x[1]) |> x-> mod(x,360)
+
   jj=findlast(θ_radii.<= θ)
 
-  @debug "(ii,jj)=($ii,$jj)"
-  @debug "r(t_intersection)=$(r(t_intersection))"
+
+  n₁=refractive_index_map[ii,jj]
+  n₀= ifelse(n₀>0,n₀,n₁)
+  @info "n₀=$n₀, n₁=$n₁"
   # compute Interface
   return let # return the initial ray
-    b,target=bend(BottomIntersection(),ray,t_intersection;
+    ray_out,target=bend(BottomIntersection(),ray,t_intersection;
       n₀=n₀, # refractive index space
-      n₁=refractive_index_map[ii,jj], # refractive index atmosphere
+      n₁=n₁, # refractive index atmosphere
       h=h_levels[ii]) # level
-    (b,target,h_levels[ii], # return the level indexndex
-    (ii,jj)) # return the intersection i
+    (ray_out,target,h_levels[ii], # return the level indexndex
+    (ii,jj),t_intersection) # return the intersection i
     end
 end
+
 @kwdef mutable struct Register{T}
   flag::Bool=false
   iteration::Int=0

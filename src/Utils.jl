@@ -261,43 +261,38 @@ function mjd2000_to_jd(days::Int=0,hours::Int=0,minutes::Int=0,seconds::Int=0,mi
 end
 
 
-function ellipsfrome²(e²)
-  b=(1-e²)^(1/2)
-  CoordRefSystems.ellipfromab(1,b)
+function ellipsfrome²(squared_eccentricity_earth)
+  minoraxis_earth=(1-squared_eccentricity_earth)^(1/2)
+  CoordRefSystems.ellipfromab(1,minoraxis_earth)
 end
 
+function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::T where {Datum,T}
+  squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
+  θ=atan(y,x)
+  @inline function _NN(θ::T)::T
+    return 1/sqrt(1-squared_eccentricity_earth*sin(θ)^2)
+  end
+  @inline function _hh(x,θ)
+    return x/cos(θ)-_NN(θ)
+  end
+  @inline function _θ(θ,x,z)
+    R=_NN(θ)
+    h=_hh(x,θ)
+    return atan(z/x*(1-squared_eccentricity_earth*(R/(R+h))^2))
+  end
+  maxerror=1e-10
+  @debug "θ=$θ"
+  θnew=_θ(θ,x,y)
+  @debug "θnew=$θnew"
+  @debug "diff=$(θnew-θ)"
+  while abs(θnew-θ)>maxerror
+    θ=θnew
+    θnew=_θ(θ,x,y)
+    @debug "θnew=$θnew"
+    @debug "diff=$(θnew-θ)"
 
-
-function initialize_raytracing_plot(h_levels,θ_radii)
-  fig=Figure(size=(600,800))
-  ax=Axis(fig[1:2,1],
-  xlabel="w",
-  ylabel="z"
-  )
-
-    ax2a=Axis(fig[3,1][1,1],
-    xlabel="Altitude (km)",
-    ylabel="Refractive Index"
-    )
-    ax2b=Axis(fig[3,1][1,2],
-    xlabel="Iteraction",
-    ylabel="Altitude (km)",
-    )
-    #scatter!(ax,hhh.*a)
-    #scatter!(ax,allintersections)
-    for h in h_levels
-      lines!(ax,[let
-        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
-        x-> (x.w,x.z)
-        end
-        for tt in LinRange(0,361,1000)])
-    end
-    for tt in θ_radii
-      lines!(ax,[let
-        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
-        x-> (x.w,x.z)
-        end
-        for h in h_levels])
-    end
-  return (fig,ax,ax2a,ax2b)
+  end
+  return θnew
 end
+
+geocentric_to_geodesic_θ(x,y)=geocentric_to_geodesic_θ(NormalizeEarth,x,y)

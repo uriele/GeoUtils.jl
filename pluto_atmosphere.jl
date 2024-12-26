@@ -39,7 +39,7 @@ md"""
 - CO2ppm
 - λ
 
-In low precision applications, like laser interferometry, it is more convenient to use formula instead of measuring (n-1) directly. Moreover, methods for the optical measuments through an uncontrolled atmosphere using simultaneously two or more wavelengths require accurate forumalas for relative freactivity as a function of air composition.
+In low precision applications, like laser interferometry, it is more convenient to use formula instead of measuring (n-1) directly. Moreover, methods for the optical measuments through an uncontrolled atmosphere using simultaneously two or more wavelengths require accurate forumalas for relative freactivity as majoraxis_earth function of air composition.
 
 The refractive index of of a mixture of nonpolar gases is given by the relationship
 
@@ -132,7 +132,7 @@ texeq"\rho(g/m^3)=348.328 \frac{P}{T}\left[1+P\left(
 # ╔═╡ 75ca2209-8cc4-41ca-8b09-cd05351ce15e
 md"""
 
-where 
+where
 - P is in [hPa]
 - T is in [K]
 
@@ -144,9 +144,9 @@ Thus, the refractivity Rᵢ of dry air can be found by substituting in Eq. $(eqr
 md"""
 ## Water Vapor
 
-The refractivity of water vapor, the most important of the variable constituents of atmospheric air, is found under known conditions by multiplying Erickson's' accurate formula for relative refractivity by 307.01E-8, the value of refractivity given by Barrell and Sears' absolute measurements at 4679.46 Å, 10 torr (13.33 mb), and 20°C. 
+The refractivity of water vapor, the most important of the variable constituents of atmospheric air, is found under known conditions by multiplying Erickson's' accurate formula for relative refractivity by 307.01E-8, the value of refractivity given by Barrell and Sears' absolute measurements at 4679.46 Å, 10 torr (13.33 mb), and 20°C.
 
-The resulting equation for absolute refracitivty of water vapor under these conditions of tempererature and pressure is 
+The resulting equation for absolute refracitivty of water vapor under these conditions of tempererature and pressure is
 
 $(texeq"(n-1)_{vapor}\times 10^8=295.235+2.6422\sigma^2-0.032380\sigma^4+0.004028\sigma^6")
 
@@ -183,7 +183,7 @@ $(texeq"n_g=n+\sigma\frac{dn}{d\sigma}")
 
 The most commonly used approximation to compute the refractive index of air is Ciddor [^5]. Like Owens, Ciddor approach was to find the value of each individual component (dry air, water vapor, CO2) individually relative to their density at standard condition.
 
-However, unlike Owens (previous paragraphers), he used the equation for moist air developed by the International Beaurau of Weigths and measurments. 
+However, unlike Owens (previous paragraphers), he used the equation for moist air developed by the International Beaurau of Weigths and measurments.
 
 ## Range of Validity
 

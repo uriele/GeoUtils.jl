@@ -81,12 +81,12 @@ end
 
 # ╔═╡ 053c6b5e-d97f-454e-83e0-8d8510674023
 let
-	@variables θ::Real h::Real a::Real b::Real R::Real h₁::Real h₂::Real θ₁::Real θ₂::Real η::Real ξ::Real Δθ₁::Real Δθ₂::Real
+	@variables θ::Real h::Real majoraxis_earth::Real b::Real R::Real h₁::Real h₂::Real θ₁::Real θ₂::Real η::Real ξ::Real Δθ₁::Real Δθ₂::Real
 
 	_θ(η)=(θ₁+θ₂)/2+(θ₂-θ₁)*η/2
 	_h(ξ)=(h₁+h₂)/2+(h₂-h₁)*ξ/2
 
-	r²(θ,h)=cos(θ)^2*(a+h)^2+sin(θ)^2*(b+h)^2
+	r²(θ,h)=cos(θ)^2*(majoraxis_earth+h)^2+sin(θ)^2*(b+h)^2
 	r(θ,h)=sqrt(r²(θ,h))
 	Dθ=Differential(θ)
 	Dh=Differential(h)
@@ -94,7 +94,7 @@ let
 	Dξ=Differential(ξ)
 	Dr=Differential(R)
 
-	RR=simplify(sin(θ)^2*(a+h)^2* +cos(θ)^2*(b+h)^2)
+	RR=simplify(sin(θ)^2*(majoraxis_earth+h)^2* +cos(θ)^2*(b+h)^2)
 
 	x=R*cos(θ)
 	y=R*sin(θ)
@@ -116,11 +116,11 @@ end
 
 # ╔═╡ 259fa49d-ceba-44e4-bcb6-30f90b4c0516
 let
-	@variables a::Real b::Real h::Real hₐ::Real hᵦ::Real f::Real fₕ::Real
+	@variables majoraxis_earth::Real b::Real h::Real hₐ::Real hᵦ::Real f::Real fₕ::Real
 
-	# a>b  f<1
+	# majoraxis_earth>b  f<1
 	#h_b>h_a  f_h<1
-	_f=b^2/a^2
+	_f=b^2/majoraxis_earth^2
 	_f_h=(1+hₐ)^2/(1+hᵦ)^2
 
 	#fₕ*(1+hᵦ)^2=(1+hₐ)^2
@@ -130,20 +130,20 @@ end
 
 # ╔═╡ 2f9662af-6a13-45b5-bf76-56bf76cd99e7
 let
-	a=10
+	majoraxis_earth=10
 	b=5
 	h=1
-	f=b^2/a^2
+	f=b^2/majoraxis_earth^2
 
-	ff(h)=(1+h/a)^2/(1+h/b)^2
+	ff(h)=(1+h/majoraxis_earth)^2/(1+h/b)^2
 
 
 	ff1(h)=sqrt(f*(1+sqrt(f)*h/b)^2/(sqrt(f)+sqrt(f)*h/b)^2)
 
-	f1=b/a
+	f1=b/majoraxis_earth
 	ff2(hb)=(1+f1*hb)/(1+hb)
 	h=0.23456
-	@debug 1+h/a
+	@debug 1+h/majoraxis_earth
 	@debug (1+h/b)*ff2(h/b)
 	@debug sqrt(ff(2)) ff1(2) ff2(2/b)
 end
