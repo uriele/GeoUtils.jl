@@ -296,7 +296,7 @@ Interface(;n::T=1.0,h::T=T(0.0)) where {T<:IEEEFloat} = Interface{T}(h,n*n,n)
 @inline bend(x,ray::Ray2D,t;kwargs...) = bend(IntersectionStyle(x),x,ray,t;kwargs...)
 
 
-const SHIFTORIGIN=1e-8
+const SHIFTORIGIN=1e-12
 
 @inline function _bend_initialize(ray::Ray2D,t::T, n₀::T,n₁::T) where T
   _neworigin=ray(t)
@@ -312,14 +312,15 @@ end
   (_neworigin,_direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
   N=_normal_vector(_neworigin...,h,squared_eccentricity_earth).*outward |> x-> x/hypot(x...)
   ray_out,isReflected=_bend_common(_neworigin,_direction,N,n₀₁,n₀₁²)
-  @info "h: $h, n₀: $n₀, n₁: $n₁"
-  @info "N: $(hypot(N...)) $(atand(-N[2]/N[1]))"
-  @info "direction: $(hypot(_direction...)) $(atand(-_direction[2]/_direction[1])),"
+  @debug "h: $h, n₀: $n₀, n₁: $n₁"
+  @debug "N: $(hypot(N...)) $(atand(-N[2]/N[1]))"
+  @debug "direction_new: $(hypot(_direction...)) θ: $(atand(_direction[2]/_direction[1])),"
+  @debug "direction_old: $(hypot(ray.direction...)) θ: $(atand(ray.direction[2]/ray.direction[1])),"
 
   sinθ₀= sqrt(1-(-N⋅_direction)^2)
   sinθ₁= sqrt(1-(-N⋅get_direction(ray_out))^2)
-  @debug  "sinθ₀= $(sinθ₀), sinθ₁= $(sinθ₁)"
-  @debug  "@debug (asind(sinθ₀)), θ₁= $(asind(sinθ₁))"
+  @debug  "sinθ₀= $(sinθ₀), sinθ₁= $(sinθ₁), sinθ₀-sinθ₁=$(sinθ₀-sinθ₁)"
+  @debug  "θ₀=$(asind(sinθ₀)), θ₁= $(asind(sinθ₁))"
   @debug "n₀= $(n₀), n₁= $(n₁)"
   isRising= acosd(-N⋅_direction)>90
   @debug "isRising: $isRising, isReflected: $isReflected"
@@ -335,11 +336,12 @@ end
   isRising= acosd(-N⋅_direction) #|> x-> ifelse(abs(x)==90,x,rem(x,180,RoundNearest) )<0
   @debug "N: $(hypot(N...)) $(atand(-N[2]/N[1])), direction: $(hypot(_direction...)) $(atand(-_direction[2]/_direction[1])),"
   @debug "ray_out: $ray_out"
+  @debug "direction_new: $(hypot(_direction...)) θ: $(atand(_direction[2]/_direction[1])),"
+  @debug "direction_old: $(hypot(ray.direction...)) θ: $(atand(ray.direction[2]/ray.direction[1])),"
   sinθ₀= sqrt(1-(-N⋅_direction)^2)
   sinθ₁= sqrt(1-(-N⋅get_direction(ray_out))^2)
-  @debug "sinθ₀= $(sinθ₀), sinθ₁= $(sinθ₁)"
-  @debug "θ₀= $(asind(sinθ₀)), θ₁= $(asind(sinθ₁))"
-  @debug "n₀= $(n₀), n₁= $(n₁)"
+  @debug  "sinθ₀= $(sinθ₀), sinθ₁= $(sinθ₁), sinθ₀-sinθ₁=$(sinθ₀-sinθ₁)"
+  @debug  "θ₀=$(asind(sinθ₀)), θ₁= $(asind(sinθ₁))"
   @debug "isRising: $isRising, isReflected: $isReflected"
   return (ray_out,isReflected,isRising)
 end
@@ -426,13 +428,11 @@ const INWARD_NORMAL=-1.0
 
   sinθₙ² =n₀₁²*(1-cosθₙ^2)
 
-  newdir= if sinθₙ²≤1 # refract or reflect
-    n₀₁*_direction+(n₀₁*cosθₙ-sqrt(1-sinθₙ²))*N
+  if sinθₙ²≤1
+    newdir=n₀₁*_direction+(n₀₁*cosθₙ-sqrt(1-sinθₙ²))*N
   else
-    _direction-2*cosθₙ*N
+    newdir=_direction-2*cosθₙ*N
     isReflected=true
-    @debug "is reflected"
-    #readline()
   end
   # SHIFT ORIGIN TO AVOID NUMERICAL ISSUES
   return Ray2D(origin+newdir*SHIFTORIGIN,newdir),isReflected
@@ -450,16 +450,31 @@ end
 @inline _tangent_vector(args...)=_normal_vector(args...) |> x-> Vec2(x.y,-x.x)
 # Create Rays from the orbit
 
+"""
+    create_rays(datum::Datum,orb::Orbit)::Ray2D{T}
+    create_rays(orb::Orbit)::Ray2D{T}
 
+Create a ray from the datum and the orbit. If the datum is not provided, it will use the NormalizeEarth datum
+"""
 function create_rays(datum::Datum,orb::Orbit) where Datum
   squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
   (w,z)=(orb.w,orb.z)
-  (nx,ny)=-_normal_vector(w,z,0,squared_eccentricity_earth)
-  #angle computed with respect to the tangent plane
-  (tx,ty)=(ny,-nx)
-  angle= orb.ang
+  #################MARCO CHANGE BACK
+  #= LIMB ANGLE WITH RESPECT TO NORMAL TO EARTH
+  θ,h=geocentric_to_geodesic_θ(w,z)
+  (w_real,z_real)=convert(ECEF2D{datum},LLA2D{datum}(0.,θ)) |> x-> (x.w,x.z)
+  #@info "θ: $θ, h: $h"
+  (tx,ty)=_tangent_vector(w_real,z_real,0,squared_eccentricity_earth)*INWARD_NORMAL
+  =#########################
+  # LIMB ANGLE WITH RESPECT TO CENTER TO THE EARTH
+   θ = atan(z/w)
+  (tx,ty)=(z,-w)|> x-> x./hypot(x...) .*INWARD_NORMAL
+  #################################
+
+  angle= orb.ang*INWARD_NORMAL
+
   @inline _rotation_matrix(θ)= SMatrix{2,2}([cosd(θ) sind(θ);-sind(θ) cosd(θ)] )
-  return Ray2D(Vec2(w,z),_rotation_matrix(-angle)*Vec2(tx,ty))
+  return Ray2D(Vec2(w,z),_rotation_matrix(angle)*Vec2(tx,ty))
 end
 
 create_rays(orb::Orbit)=create_rays(NormalizeEarth,orb)
@@ -566,8 +581,8 @@ function _intersection_type(tb::TB,position,wedge_index,h_levels,refractive_map)
   # thus, the extremes are not considered
   if position_interface_index1<1  # free space
     n₁=1.0
-  elseif position_interface_index1>=nlevels  # ground full reflection
-    n₁=Inf
+  elseif position_interface_index1>nlevels  # ground full reflection
+    n₁=0.01
   else            # atmosphere
     n₁=refractive_map[index...]
   end
@@ -587,7 +602,7 @@ const BOTTOM_LEVEL_INDEX=1
 const TOP_LEVEL_INDEX=0
 ######################################################
 @inline function new_intersection(ray::Ray2D, # ray
-  wedge_index; # wedge index
+  input_index; # wedge index
   refractive_map, # map of refractive index
   h_levels, # levels for i
   θ_radii, # radii angles for j
@@ -599,21 +614,24 @@ const TOP_LEVEL_INDEX=0
   previous_intersection=nothing) # register
 
   ###########################
-  n₀= refractive_map[wedge_index...]
+  n₀= refractive_map[input_index...]
   ###########################
-  previous_index=wedge_index
+  previous_index=input_index
   ###########################
 
-  t_radius_l=advance(LeftIntersection(),ray,line_radii[wedge_index[2]+LEFT_RADIUS_INDEX])
-  t_radius_r=advance(RightIntersection(),ray,line_radii[wedge_index[2]+RIGHT_RADIUS_INDEX])
+  t_radius_l=advance(LeftIntersection(),ray,line_radii[input_index[2]+LEFT_RADIUS_INDEX])
+  t_radius_r=advance(RightIntersection(),ray,line_radii[input_index[2]+RIGHT_RADIUS_INDEX])
+
+  @debug "BottomIntersection"
+  t_level_b=advance(BottomIntersection(),ray,scale_levels[input_index[1]+BOTTOM_LEVEL_INDEX])
+  t_level_t=advance(TopIntersection(),ray,scale_levels[input_index[1]+TOP_LEVEL_INDEX])
 
   t_radius= min(t_radius_l,t_radius_r)
-  @debug "t_radius: $t_radius,t_left:$t_radius_l,t_right: $t_radius_r"
   leftright= t_radius_l<t_radius_r ? LeftIntersection() : RightIntersection() # left or right
-  @debug "BottomIntersection"
-  t_level_b=advance(BottomIntersection(),ray,scale_levels[wedge_index[1]+BOTTOM_LEVEL_INDEX])
-  t_level_t=advance(TopIntersection(),ray,scale_levels[wedge_index[1]+TOP_LEVEL_INDEX])
   t_level= min(t_level_b,t_level_t)
+
+  @debug "t_radius: $t_radius,t_left:$t_radius_l,t_right: $t_radius_r"
+  @debug "t_level: $t_level,t_bottom:$t_level_b,t_top: $t_level_t"
   bottomtop= t_level_b<t_level_t ? BottomIntersection() : TopIntersection() # bottom or top
 
 
@@ -629,14 +647,14 @@ const TOP_LEVEL_INDEX=0
     #######################
     # DEBUG ONLY RADII
     #######################
-    @info "DEBUG ONLY RADII"
+    @debug "DEBUG ONLY RADII"
     radius_or_level= leftright #t_radius<t_level ? leftright : bottomtop
     t_real= t_radius #min(t_radius,t_level)
   elseif debug_intesection==2
     #######################
     # DEBUG ONLY LEVELS
     #######################
-    @info "DEBUG ONLY LEVELS"
+    @debug "DEBUG ONLY LEVELS"
     radius_or_level= bottomtop
     t_real= t_level
     #######################
@@ -649,14 +667,14 @@ const TOP_LEVEL_INDEX=0
   @debug "t_radius: $t_radius"
 
 
-  (n₁,index,h)=_intersection_type(radius_or_level,ray(t_real),wedge_index,h_levels,refractive_map)
+  (n₁,index,h)=_intersection_type(radius_or_level,ray(t_real),input_index,h_levels,refractive_map)
 
 
-  n₀=refractive_map[wedge_index...]
+  n₀=refractive_map[input_index...]
   @debug "t: $t_real, n₀: $n₀, n₁: $n₁, h: $h, whatMatch: $radius_or_level, index: $index"
 
   ray_out,isReflected = bend(radius_or_level,ray,t_real;n₀=n₀,n₁=n₁,h=h)
-  index= isReflected ? wedge_index : index
+  index= isReflected ? input_index : index
   # condition to stop ray tracing
   target = 1<index[1]<(length(h_levels)-1)
   return (ray_out,target,h,index,radius_or_level)

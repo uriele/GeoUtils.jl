@@ -266,21 +266,39 @@ function ellipsfrome²(squared_eccentricity_earth)
   CoordRefSystems.ellipfromab(1,minoraxis_earth)
 end
 
-function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::T where {Datum,T}
+function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Datum,T}
   squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
+  majoraxis_earth=majoraxis(ellipsoid(datum))
+  minoraxis_earth=minoraxis(ellipsoid(datum))
+  minoraxis_earth/=majoraxis_earth
+  x/=majoraxis_earth
+  y/=majoraxis_earth
   θ=atan(y,x)
+
   @inline function _NN(θ::T)::T
     return 1/sqrt(1-squared_eccentricity_earth*sin(θ)^2)
   end
-  @inline function _hh(x,θ)
-    return x/cos(θ)-_NN(θ)
+
+  @inline function _hh(x,y,θ)
+    cosθ=cos(θ)
+    if cosθ==0
+      return abs(y)-minoraxis_earth
+    end
+    @debug "N=$(_NN(θ))"
+    @debug "x/cosθ=$(x/cosθ)"
+    return x/cosθ-_NN(θ)
   end
+
   @inline function _θ(θ,x,z)
     R=_NN(θ)
-    h=_hh(x,θ)
-    return atan(z/x*(1-squared_eccentricity_earth*(R/(R+h))^2))
+
+    h=_hh(x,z,θ)
+    @debug "R=$R"
+    @debug "h=$h"
+    return atan(z/x/(1-squared_eccentricity_earth*(R/(R+h))))
   end
-  maxerror=1e-10
+
+  maxerror=1e-15
   @debug "θ=$θ"
   θnew=_θ(θ,x,y)
   @debug "θnew=$θnew"
@@ -292,7 +310,7 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::T where {Datum,T}
     @debug "diff=$(θnew-θ)"
 
   end
-  return θnew
+  return (mod(rad2deg(θnew),360),_hh(x,y,θnew)*majoraxis_earth)
 end
 
 geocentric_to_geodesic_θ(x,y)=geocentric_to_geodesic_θ(NormalizeEarth,x,y)

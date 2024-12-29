@@ -256,8 +256,14 @@ end
 
 read_orbit(file::String)=read_orbit(Float64,file)
 
-normalize_orbit(datum::Datum,orbit::O) where {Datum,O<:Orbit{T}} where T = majoraxis(ellipsoid(datum)) |> _majoraxis_earth-> uconvert(km,_majoraxis_earth) |> ustrip|>
-_majoraxis_earth-> Orbit(orbit.z/_majoraxis_earth,orbit.w/_majoraxis_earth,orbit.ang,orbit.h/_majoraxis_earth,orbit.other)
+
+function normalize_orbit(datum::Datum,orbit::O) where {Datum,O<:Orbit{T}} where T
+  majoraxis_earth= majoraxis(ellipsoid(datum)) |> ma-> uconvert(km,ma) |> ustrip
+  w_orbit= orbit.w/majoraxis_earth
+  z_orbit= orbit.z/majoraxis_earth
+  h_orbit= orbit.h/majoraxis_earth
+  return Orbit(z_orbit,w_orbit,orbit.ang,h_orbit,orbit.other)
+end
 normalize_orbit(orbit::O) where O<:Orbit{T} where T = normalize_orbit(WGS84Latest,orbit)
 
 struct ECEF2D{Datum,T<:IEEEFloat}

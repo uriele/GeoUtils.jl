@@ -1,5 +1,5 @@
 module CoordRefSystemsExt
-    using CoordRefSystems.
+    using CoordRefSystems
     using Unitful
 
     export EarthCenteredInertial, ECI

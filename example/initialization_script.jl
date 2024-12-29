@@ -155,22 +155,8 @@ h_knots="0.000000000000000E+000   3.60000000000000        3.80000000000000
 x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
 x-> [parse(Float64,y) for y in x]./majoraxis_earth
 # Generate discretized atmosphere using the knots
-#NoAtmosphere()
-pressure_c,temperature_c,refractive_c,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
-#setModel(NoAtmosphere())
+pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
 
-#pressure_n,temperature_n,refractive_n,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
-
-#extrema(refractive_c-refractive_n)
-pressure_c,temperature_c,refractive_c,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
-
-pressure,temperature,refractive=pressure_c,temperature_c,refractive_c
-#pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Ciddor(),interpolation_pressure=LinearPressure())
-#pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Mathar4(),interpolation_pressure=LinearPressure())
-
-#pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Carlotti(),interpolation_pressure=LogarithmicPressure())
-#pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Ciddor(),interpolation_pressure=LogarithmicPressure())
-#pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Mathar4(),interpolation_pressure=LogarithmicPressure())
 
 
 ############################################
@@ -219,24 +205,28 @@ function find_first_intersection_ellipse(ray::Ray2D, # ray
   h_levels=h_levels, # levels for i
   θ_radii=θ_radii, # radii angles for j
   scale_levels=scale_levels) # scaling mapping to unit circle
-
+  h_levels_max=maximum(h_levels)
   # index of outmost level (to be sure it is sorted in the right order)
-  ii=findfirst(h_levels.==maximum(h_levels))
+  ii=findfirst(h_levels.==h_levels_max)
   @debug "ii=$ii"
   # find intersection point
   t_intersection=advance(BottomIntersection(),ray,scale_levels[ii])
   @debug "t_intersection=$t_intersection"
   # find j on ellipse
-  #θ=geocentric_to_geodesic_θ(ray(t_intersection)...)
+  θ,h=geocentric_to_geodesic_θ(ray(t_intersection+GeoUtils.SHIFTORIGIN)...)
 
-  θ=ray(t_intersection) |> x-> atand(x[2],x[1]) |> x-> mod(x,360)
+  #θ=ray(t_intersection) |> x-> atand(x[2],x[1]) |> x-> mod(x,360)
+  #@info "θ=$θ h=$h h=$(h_levels_max)"
+  θ_max=maximum(θ_radii)
 
-  jj=findlast(θ_radii.<= θ)
-
+  # Take advantage of the semicircular matrix, if the theta is greater
+  # that 359.0, we loop around to find the leftmost value
+  jj=ifelse(θ>θ_max,length(θ_radii), findlast(θ_radii.<= θ))
+  #@info "jj=$jj, θ_max=$θ_max,θ=$θ"
 
   n₁=refractive_index_map[ii,jj]
   n₀= ifelse(n₀>0,n₀,n₁)
-  @info "n₀=$n₀, n₁=$n₁"
+  #@info "n₀=$n₀, n₁=$n₁"
   # compute Interface
   return let # return the initial ray
     ray_out,target=bend(BottomIntersection(),ray,t_intersection;
@@ -278,4 +268,11 @@ Base.show(io::IO,register::Register)= begin
     println(io,"Tangent Point Not Found  ($(register.iteration))")
   end
 end
+
+#==========#
+_angleme(r::Ray2D) = r(0)-r(1) |> x->(x[2],x[1])  |> x-> atand(x...)
+_angleme(r1::Ray2D,r::Ray2D) = r1(0)-r(0) |> x->(x[2],x[1])  |> x-> atand(x...)
+##############
+
+
 Register()=Register{Float64}()
