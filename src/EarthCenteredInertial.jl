@@ -306,7 +306,7 @@ function Base.convert(::Type{LatLonAlt{Datum}},coords::EarthCenteredEarthFixed{D
   # initial value
   ϕ′ = atand(P/Z)
 
-  @debug "ϕ′: $(ϕ′)"
+
 
   @inline function N(ϕ′)
     majoraxis_earth / sqrt(1-squared_eccentricity_earth*sind(ϕ′)^2)
@@ -317,7 +317,7 @@ function Base.convert(::Type{LatLonAlt{Datum}},coords::EarthCenteredEarthFixed{D
   while true
     ϕ = atand(Z/P/(1-squared_eccentricity_earth*N′*cosd(ϕ′)/P))
     err=abs(ϕ-ϕ′)
-    #@debug "ϕ: $(rad2deg(ϕ)), N: $N′, err: $(rad2deg(err))"
+    #
     ϕ′ = ϕ
     N′= N(ϕ′)
     if err < eps()

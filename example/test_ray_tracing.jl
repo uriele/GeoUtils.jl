@@ -44,7 +44,7 @@ n₀=1.0
 
 index=deepcopy(wedge_index)
 
-code_intersection(ray::Ray2D,index;kwargs...)=
+@inline code_intersection(ray::Ray2D,index;kwargs...)=
 new_intersection(ray, # ray
   index; # wedge index
   refractive_map=refractive, # map of refractive index
@@ -58,91 +58,52 @@ new_intersection(ray, # ray
 
 hmax=maximum(h_levels)  #initialize the maximum height
 
-for i in eachindex(rays1)
-  #@info i
-  r=rays1[i]
-
+@inline function getTangentquote(ray,local_index,local_register;hmax=hmax,levels=size(h_levels,1)-1)
+  hmin=hmax ;              #every time we start a new ray, we initialize the minimum height to be the maximum height
   ############################
-  hmin=hmax               #every time we start a new ray, we initialize the minimum height to be the maximum height
-  local_index=index[i]    #initialize the wedge index
+  inside_atmosphere=true;  # Initialize the search for the intersection
+  tangent_found = false;   # Initialize the tangent point
   ############################
-
-  ############################
-  # TO PLOT THE RAYS
-  #=###########################
-  refraction_in_node=Float32[]
-  intersections=Point2f[]
-  directions=Point2f[]
-  altitudes=Float32[]
-  push!(intersections,Point2f(rays[1,i].origin...))
-
-  push!(intersections,Point2f(r.origin...))
-  push!(directions,Point2f(r.direction...))
-  push!(refraction_in_node,refractive[index...])
-  push!(altitudes,hmin)
-
-  =############################
-  inside_atmosphere=true  # Initialize the search for the intersection
-  tangent_found = false   # Initialize the tangent point
-  ############################
-  previous_intersection=BottomIntersection()
-
-  #_count=0
-  #while _count<20
+  previous_intersection=BottomIntersection();
   while inside_atmosphere
-
-    r1,target,h,local_index,previous_intersection=code_intersection(r,local_index;
-      previous_intersection=previous_intersection)
-      # If the ray is in the atmosphere
+    ray,_,h,local_index,previous_intersection=code_intersection(ray,local_index;
+      previous_intersection=previous_intersection);
 
     isouterspace=local_index[1]<1;
-    isearth=local_index[1]>size(refractive,1);
+    isearth=local_index[1]>levels;
 
-    @debug "isouterspace: $isouterspace, isearth: $isearth"
     inside_atmosphere= !(isouterspace || isearth);
 
-    #= Refractive Index in Current Node
-    n₀= if index[1]<1
-      1.0;
-    elseif index[1]>size(refractive,1)
-      0.01;
-    else
-      refractive[index...];
-    end;
-
-      push!(refraction_in_node,n₀);
-      push!(intersections,Point2f(r.origin...));
-      push!(directions,Point2f(r.direction...));
-      push!(altitudes,h);
-=#################################
-      # update the position of the minimum
+    # update the position of the minimum
       if hmin>=h
          hmin=h;
-         next!(register[i])
+         next!(local_register)
       elseif !tangent_found   # if the tangent point is not found
-         setTangent!(register[i],r(0)...)
-         tangent_found=true
-         register[i]
-      end;
-
-      @debug "h:$(h*majoraxis_earth)km  $(_angleme(r))"
-      @debug "previous_intersection: $previous_intersection"
-      @debug register[i]
-      r=r1
+         setTangent!(local_register,ray.origin...)
+         tangent_found=true;
+      end
   end
-  #==================================
-  scatterlines!(ax,intersections[1:end])
-  scatterlines!(ax,[intersections[1],intersections[end]])
-
-  scatterlines!(ax3,[intersections[1],intersections[end]])
-  scatterlines!(ax3,intersections[1:end])
-  scatterlines!(ax2b,altitudes.*majoraxis_earth;label="Ray $i")
-  scatterlines!(ax2a,altitudes.*majoraxis_earth,refraction_in_node;label="Ray $i")
-========================================#
+  return local_register
 end
 
 
-altitude_quote=StructArray(register).h.*majoraxis_earth |> x-> reshape(x,800,19)
+using Profile,PProf
+using BenchmarkTools
+  #
+  @profile begin
+  for (ray,local_register,local_index) in zip(rays1,register,index)
+    ############################
+    local_register=getTangentquote(ray,local_index,local_register;hmax=hmax)
+  end
+end
+@profile  begin
+  Threads.@threads for i in eachindex(rays1) #,register,index)
+    register[i]=getTangentquote(rays1[i],index[i],register[i];hmax=hmax)
+  end
+end
+pprof(;webport=57777)
+nt=Threads.nthreads()
+
 
 
 figure=Figure()
@@ -192,10 +153,10 @@ diff_altitude,max_error,position=print_sequence(altitude_quote,orbit,majoraxis_e
 psort=sort([(c[1],c[2]) for c in position])
 
 max_error
- mat1=zeros(3,size(psort,1))
-[mat1[:,i]=[c[1] c[2] diff_altitude[c[1],c[2]]] for (i,c) in enumerate(psort)]
+ mat1=zeros(5,size(psort,1))
+[mat1[:,i]=[c[1] c[2] diff_altitude[c[1],c[2]] orbit.h[c[1],c[2]]*majoraxis_earth altitude_quote[c[1],c[2]] ] for (i,c) in enumerate(psort)]
 mat1
-
+mat1'
 figure=Figure()
 ax=Axis(figure[1,1],
 xlabel="Difference in Altitude km",
@@ -265,7 +226,7 @@ for (ii,i) in enumerate(high_error)
     isouterspace=local_index[1]<1;
     isearth=local_index[1]>size(refractive,1);
 
-    @debug "isouterspace: $isouterspace, isearth: $isearth"
+
     inside_atmosphere= !(isouterspace || isearth);
 
     #Refractive Index in Current Node

@@ -205,10 +205,10 @@ Calculate the distance from a segment AB to a segment CD
   # Assume unit ray
   # A+t*(B-A) = p = C+s*(D-C)
   # [B-A  C-D]*[t;s]=[C-A]
-  #@debug "A=$A B=$B C=$C D=$D"
+  #
   M=[(B-A) (C-D)];
   y=(C-A);
-  #@debug "M=$M y=$y"
+  #
   _,R=qr([M y]);
   τ = atol(T);
   # Check L1 norm of the residual
@@ -260,24 +260,15 @@ IntersectionStyle(::Type{<:LevelRadiusIntersection}) = IsIntersection()
 
 
 @inline function advance(::L, r::Ray2D{T},scale)::T where {L<:LevelIntersection,T}
-  @debug "advance level"
-  @debug "scale: $scale"
-  @debug "r: $r"
   _orig=scale(r.origin)
   _direc=scale(r.direction)
   _hyp_direct= hypot(_direc...)
-  t=distance_from_unit_circle(_orig,_direc./_hyp_direct) |> x-> x/_hyp_direct
-  #@debug "t_level: $t"
-  #t<=1e-10 ? T(Inf) : t
-  return t
+  return distance_from_unit_circle(_orig,_direc./_hyp_direct) |> x-> x/_hyp_direct
 end
 
 
 @inline function advance(::R, ray::Ray2D{T},radius)::T where {R<:RadiusIntersection,T}
-  t=distance_from_radii(ray,radius)
-  @debug "t_radius: $t, radius: $radius,ray: $ray"
-  #t<=1e-10 ? T(Inf) : t
-  return t
+  return distance_from_radii(ray,radius)
 end
 
 abstract type AbstractInterface{T<:IEEEFloat} end
@@ -312,19 +303,7 @@ end
   (_neworigin,_direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
   N=_normal_vector(_neworigin...,h,squared_eccentricity_earth).*outward |> x-> x/hypot(x...)
   ray_out,isReflected=_bend_common(_neworigin,_direction,N,n₀₁,n₀₁²)
-  @debug "h: $h, n₀: $n₀, n₁: $n₁"
-  @debug "N: $(hypot(N...)) $(atand(-N[2]/N[1]))"
-  @debug "direction_new: $(hypot(_direction...)) θ: $(atand(_direction[2]/_direction[1])),"
-  @debug "direction_old: $(hypot(ray.direction...)) θ: $(atand(ray.direction[2]/ray.direction[1])),"
-
-  sinθ₀= sqrt(1-(-N⋅_direction)^2)
-  sinθ₁= sqrt(1-(-N⋅get_direction(ray_out))^2)
-  @debug  "sinθ₀= $(sinθ₀), sinθ₁= $(sinθ₁), sinθ₀-sinθ₁=$(sinθ₀-sinθ₁)"
-  @debug  "θ₀=$(asind(sinθ₀)), θ₁= $(asind(sinθ₁))"
-  @debug "n₀= $(n₀), n₁= $(n₁)"
-  isRising= acosd(-N⋅_direction)>90
-  @debug "isRising: $isRising, isReflected: $isReflected"
-  return (ray_out,isReflected,isRising)
+  return (ray_out,isReflected)
 end
 
 
@@ -333,17 +312,8 @@ end
   (_neworigin,_direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
   N=_tangent_vector(_neworigin...,h,squared_eccentricity_earth).*outward |> x-> x/hypot(x...)
   ray_out,isReflected=_bend_common(_neworigin,_direction,N,n₀₁,n₀₁²)
-  isRising= acosd(-N⋅_direction) #|> x-> ifelse(abs(x)==90,x,rem(x,180,RoundNearest) )<0
-  @debug "N: $(hypot(N...)) $(atand(-N[2]/N[1])), direction: $(hypot(_direction...)) $(atand(-_direction[2]/_direction[1])),"
-  @debug "ray_out: $ray_out"
-  @debug "direction_new: $(hypot(_direction...)) θ: $(atand(_direction[2]/_direction[1])),"
-  @debug "direction_old: $(hypot(ray.direction...)) θ: $(atand(ray.direction[2]/ray.direction[1])),"
-  sinθ₀= sqrt(1-(-N⋅_direction)^2)
-  sinθ₁= sqrt(1-(-N⋅get_direction(ray_out))^2)
-  @debug  "sinθ₀= $(sinθ₀), sinθ₁= $(sinθ₁), sinθ₀-sinθ₁=$(sinθ₀-sinθ₁)"
-  @debug  "θ₀=$(asind(sinθ₀)), θ₁= $(asind(sinθ₁))"
-  @debug "isRising: $isRising, isReflected: $isReflected"
-  return (ray_out,isReflected,isRising)
+
+  return (ray_out,isReflected)
 end
 
 const OUTWARD_NORMAL=1.0
@@ -355,14 +325,14 @@ const INWARD_NORMAL=-1.0
 #         |  n
 #         V
 ####################
-@inline bend(::TopIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)    = _bend_ellipse(ray,t,n₀,n₁,h,INWARD_NORMAL) |> x-> (x[1],x[2])
+@inline bend(::TopIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)    = _bend_ellipse(ray,t,n₀,n₁,h,INWARD_NORMAL)
 #RightRadiusIntersection -1
 #
 #      n    |
 # <---------|
 #           |
 ####################
-@inline bend(::RightIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)  = _bend_radii(ray,t,n₀,n₁,0.0,INWARD_NORMAL)  |> x-> (x[1],x[2])
+@inline bend(::RightIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)  = _bend_radii(ray,t,n₀,n₁,0.0,INWARD_NORMAL)
 
 
 #BottomLevelIntersection 1
@@ -371,56 +341,55 @@ const INWARD_NORMAL=-1.0
 #--------------------
 ####################
 
-@inline bend(::BottomIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) = _bend_ellipse(ray,t,n₀,n₁,h,OUTWARD_NORMAL)  |> x-> (x[1],x[2])
+@inline bend(::BottomIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) = _bend_ellipse(ray,t,n₀,n₁,h,OUTWARD_NORMAL)
 #LeftRadiusIntersection 1
 # |
 # |----------> n
 # |
 #####################
-@inline bend(::LeftIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)   = _bend_radii(ray,t,n₀,n₁,0.0,OUTWARD_NORMAL)  |> x-> (x[1],x[2])
+@inline bend(::LeftIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)   = _bend_radii(ray,t,n₀,n₁,0.0,OUTWARD_NORMAL)
 
 #LeftTop 1 -1
 @inline bend(::LeftTopIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)=
   bend(LeftIntersection(),ray,t;n₀=n₀,n₁=n₁,n₂=n₂,h=h) |>
-  x-> bend(TopIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)  |> x-> (x[1],x[2])
+  x-> bend(TopIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)
 #LeftBottom 1 1
 @inline bend(::LeftBottomIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) =
   bend(LeftIntersection(),ray,t;n₀=n₀,n₁=n₁,n₂=n₂,h=h) |>
-  x-> bend(BottomIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h) |> x-> (x[1],x[2])
+  x-> bend(BottomIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)
 
 #RightTop -1 -1
 @inline bend(::RightTopIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) =
   bend(RightIntersection(),ray,t;n₀=n₀,n₁=n₁,n₂=n₂,h=h) |>
-  x-> bend(TopIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h) |> x-> (x[1],x[2])
+  x-> bend(TopIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)
 #RightBottom -1 1
 @inline bend(::RightBottomIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0)=
   bend(RightIntersection(),ray,t;n₀=n₀,n₁=n₁,n₂=n₂,h=h) |>
-  x-> bend(BottomIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h) |> x-> (x[1],x[2])
+  x-> bend(BottomIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)
 
 #TopLeft -1 1
 @inline bend(::TopLeftIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) =
   bend(TopIntersection(),ray,t;n₀=n₀,n₁=n₁,n₂=n₂,h=h) |>
-  x-> bend(LeftIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)|> x-> (x[1],x[2])
+  x-> bend(LeftIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)
 #TopRight -1 1
 @inline bend(::TopRightIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) =
   bend(TopIntersection(),ray,t;n₀=n₀,n₁=n₁,n₂=n₂,h=h) |>
-  x-> bend(RightIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h) |> x-> (x[1],x[2])
+  x-> bend(RightIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)
 
 #BottomLeft 1 1
 @inline bend(::BottomLeftIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) =
   bend(BottomIntersection(),ray,t;n₀=n₀,n₁=n₁,n₂=n₂,h=h) |>
-  x-> bend(LeftIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h) |> (x[1],x[2])
+  x-> bend(LeftIntersection(),x[1],0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)
 
 #BottomRight 1 -1
 @inline bend(::BottomRightIntersection,ray::Ray2D,t;n₀=1.0,n₁=1.0,n₂=1.0,h=0.0) =
   bend(BottomIntersection(),ray,t;n₀=n₀,n₁=n₁,n₂=n₂,h=h) |>
-  x-> bend(RightIntersection(),x,0;n₀=n₁,n₁=n₂,n₂=n₂,h=h) |> (x[1],x[2])
+  x-> bend(RightIntersection(),x,0;n₀=n₁,n₁=n₂,n₂=n₂,h=h)
 
 
 # return both the ray
 @inline function _bend_common(origin::Vec2{T},_direction::Vec2{T},
   N::Vec2{T},n₀₁::T,n₀₁²::T) where T
-
   # Base condition
   isReflected=false
 
@@ -457,15 +426,7 @@ end
 Create a ray from the datum and the orbit. If the datum is not provided, it will use the NormalizeEarth datum
 """
 function create_rays(datum::Datum,orb::Orbit) where Datum
-  squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
   (w,z)=(orb.w,orb.z)
-  #################MARCO CHANGE BACK
-  #= LIMB ANGLE WITH RESPECT TO NORMAL TO EARTH
-  θ,h=geocentric_to_geodesic_θ(w,z)
-  (w_real,z_real)=convert(ECEF2D{datum},LLA2D{datum}(0.,θ)) |> x-> (x.w,x.z)
-  #@info "θ: $θ, h: $h"
-  (tx,ty)=_tangent_vector(w_real,z_real,0,squared_eccentricity_earth)*INWARD_NORMAL
-  =#########################
   # LIMB ANGLE WITH RESPECT TO CENTER TO THE EARTH
    θ = atan(z/w)
   (tx,ty)=(z,-w)|> x-> x./hypot(x...) .*INWARD_NORMAL
@@ -527,13 +488,13 @@ const NEARBY_LEFT_INDEX=+1
 const NEARBY_RIGHT_INDEX=-1
 const NEARBY_TOP_INDEX=-1
 const NEARBY_BOTTOM_INDEX=+1
-function _intersection_type(lr::LR,position,wedge_index,h_levels,refractive_map) where LR<:RadiusIntersection
+function _intersection_type_radii(lr::LR,position,wedge_index,h_levels,refractive_map) where LR<:RadiusIntersection
 
   # left is to the left +1 and right is to the right -1
   position_interface_index2= lr==LeftIntersection() ? wedge_index[2]+NEARBY_LEFT_INDEX : wedge_index[2]+NEARBY_RIGHT_INDEX
 
   index=(wedge_index[1],position_interface_index2)
-  @debug "position: $position, index: $index"
+
   h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(position...)) |> x-> x.h
   n₁=refractive_map[index...]
   # if the last radius was ABOVE the maximum level of stratification,
@@ -541,7 +502,7 @@ function _intersection_type(lr::LR,position,wedge_index,h_levels,refractive_map)
   # TO DO maybe find a better breaking condition
   # like checking the altitude of the ray outside instead of basing it on
   # the index
-  @debug "h: $h, h_level_max: $(h_levels[1])"
+
   index=ifelse(h<=h_levels[1],index,(0,index[2]))
   (n₁,index,h)
 end
@@ -549,7 +510,7 @@ end
 
 
 
-function _intersection_type(tb::TB,position,wedge_index,h_levels,refractive_map) where TB<:LevelIntersection
+function _intersection_type_levels(tb::TB,wedge_index,h_levels,refractive_map) where TB<:LevelIntersection
   ##############################################
   # The -1 is because the number of wedges is one less the number of levels
   #
@@ -616,13 +577,10 @@ const TOP_LEVEL_INDEX=0
   ###########################
   n₀= refractive_map[input_index...]
   ###########################
-  previous_index=input_index
-  ###########################
 
   t_radius_l=advance(LeftIntersection(),ray,line_radii[input_index[2]+LEFT_RADIUS_INDEX])
   t_radius_r=advance(RightIntersection(),ray,line_radii[input_index[2]+RIGHT_RADIUS_INDEX])
 
-  @debug "BottomIntersection"
   t_level_b=advance(BottomIntersection(),ray,scale_levels[input_index[1]+BOTTOM_LEVEL_INDEX])
   t_level_t=advance(TopIntersection(),ray,scale_levels[input_index[1]+TOP_LEVEL_INDEX])
 
@@ -630,52 +588,26 @@ const TOP_LEVEL_INDEX=0
   leftright= t_radius_l<t_radius_r ? LeftIntersection() : RightIntersection() # left or right
   t_level= min(t_level_b,t_level_t)
 
-  @debug "t_radius: $t_radius,t_left:$t_radius_l,t_right: $t_radius_r"
-  @debug "t_level: $t_level,t_bottom:$t_level_b,t_top: $t_level_t"
   bottomtop= t_level_b<t_level_t ? BottomIntersection() : TopIntersection() # bottom or top
 
 
-  debug_intesection=getDebugIntersection()
-  @debug "DEBUG_INTERSECTION: $debug_intesection"
-  if debug_intesection==0
-    #######################
-    #REAL
-    #######################
-    radius_or_level=t_radius<t_level ? leftright : bottomtop
-    t_real= min(t_radius,t_level)
-  elseif debug_intesection==1
-    #######################
-    # DEBUG ONLY RADII
-    #######################
-    @debug "DEBUG ONLY RADII"
-    radius_or_level= leftright #t_radius<t_level ? leftright : bottomtop
-    t_real= t_radius #min(t_radius,t_level)
-  elseif debug_intesection==2
-    #######################
-    # DEBUG ONLY LEVELS
-    #######################
-    @debug "DEBUG ONLY LEVELS"
-    radius_or_level= bottomtop
-    t_real= t_level
-    #######################
-  else
-    throw(ArgumentError("Invalid debug intersection, use setDebugIntersection(x) x=0,1,2 \n 0: Real, 1: Debug only radii, 2: Debug only levels"))
-  end
-  @debug "radius_or_level: $radius_or_level"
-  @debug "t_real: $t_real"
-  @debug "t_level: $t_level"
-  @debug "t_radius: $t_radius"
-
-
-  (n₁,index,h)=_intersection_type(radius_or_level,ray(t_real),input_index,h_levels,refractive_map)
-
+  radius_or_level=t_radius<t_level ? leftright : bottomtop
+  t_real= min(t_radius,t_level)
 
   n₀=refractive_map[input_index...]
-  @debug "t: $t_real, n₀: $n₀, n₁: $n₁, h: $h, whatMatch: $radius_or_level, index: $index"
 
-  ray_out,isReflected = bend(radius_or_level,ray,t_real;n₀=n₀,n₁=n₁,h=h)
+  if isa(radius_or_level,LevelIntersection)
+    n₁,index,h=_intersection_type_levels(bottomtop,input_index,h_levels,refractive_map)
+    normal_direction=(radius_or_level==TopIntersection() ? INWARD_NORMAL : OUTWARD_NORMAL)
+    ray_out,isReflected = _bend_ellipse(ray,t_real,n₀,n₁,h,normal_direction)
+  else
+    n₁,index,h=_intersection_type_radii(leftright,ray(t_real),input_index,h_levels,refractive_map)
+    normal_direction=(radius_or_level==RightIntersection() ? INWARD_NORMAL : OUTWARD_NORMAL)
+    ray_out,isReflected = _bend_radii(ray,t_real,n₀,n₁,h,normal_direction)
+  end
   index= isReflected ? input_index : index
   # condition to stop ray tracing
-  target = 1<index[1]<(length(h_levels)-1)
+  #target = 1<index[1]<(length(h_levels)-1)
+  target = false
   return (ray_out,target,h,index,radius_or_level)
 end

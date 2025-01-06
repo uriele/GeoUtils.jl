@@ -71,10 +71,10 @@ let
 	B1=[∂r∂h_ ∂r∂θ_;  ∂θ∂h_  1]
 	C1=[Δh 0;0 Δθ]
 
-	#@debug A1
-	#@debug B1
-	#@debug C1
-	#@debug B1*C1
+	#
+	#
+	#
+	#
 	J_xy_ξη=A1*B1*C1
 
 end
@@ -143,9 +143,9 @@ let
 	f1=b/majoraxis_earth
 	ff2(hb)=(1+f1*hb)/(1+hb)
 	h=0.23456
-	@debug 1+h/majoraxis_earth
-	@debug (1+h/b)*ff2(h/b)
-	@debug sqrt(ff(2)) ff1(2) ff2(2/b)
+
+
+
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001

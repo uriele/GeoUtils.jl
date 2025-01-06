@@ -8,7 +8,6 @@ using Unitful: ustrip
 using Makie,WGLMakie
 
 
-
 function initialize_raytracing_plot(h_levels,θ_radii)
   fig=Figure(size=(600,800))
   ax=Axis(fig[1:2,1],
@@ -208,10 +207,10 @@ function find_first_intersection_ellipse(ray::Ray2D, # ray
   h_levels_max=maximum(h_levels)
   # index of outmost level (to be sure it is sorted in the right order)
   ii=findfirst(h_levels.==h_levels_max)
-  @debug "ii=$ii"
+
   # find intersection point
   t_intersection=advance(BottomIntersection(),ray,scale_levels[ii])
-  @debug "t_intersection=$t_intersection"
+
   # find j on ellipse
   θ,h=geocentric_to_geodesic_θ(ray(t_intersection+GeoUtils.SHIFTORIGIN)...)
 

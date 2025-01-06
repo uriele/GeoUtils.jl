@@ -74,7 +74,7 @@ function read_local_atmosphere(::Type{T},folder::String;
   squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
 
   if normalize
-    @debug "majoraxis_earth: $majoraxis_earth, h: $h"
+
     _normalize_ellipse!(h,majoraxis_earth)
     setNormalizedEarth(squared_eccentricity_earth)
     datum=NormalizeEarth
@@ -243,7 +243,7 @@ function read_orbit(::Type{T},file::String) where T
     end)
 
     orb=Matrix{Orbit{T}}(undef,nseq,maximum(mgeom))
-    @debug typeof(orb)
+
 
    [let
       [orb[i,j]=Orbit(parse.(T,split(lines[sj]))...) for (j,sj) in enumerate(seq[i])]
@@ -312,9 +312,9 @@ CoordRefSystems.ellipsoid(datum::Datum) = ellipsoid(datum)
 
 function getNormalizedEarth()
   NE=ellipsoid(NormalizeEarth)
-  @debug "majoraxis_earth: $(majoraxis(NE)), minoraxis_earth: $(minoraxis(NE))"
-  @debug "flattening: $(flattening(NE)), eccentricity: $(eccentricity(NE))"
-  @debug "eccentricity²: $(eccentricity²(NE))"
+
+
+
   return _NormalizedEarth🌎[]
 end
 
@@ -322,7 +322,7 @@ end
 function setNormalizedEarth(squared_eccentricity_earth::T) where T<:IEEEFloat
   @assert(0<=(squared_eccentricity_earth)<=1, "The eccentricity squared must be between 0 and 1")
   _NormalizedEarth🌎[]=ellipsfrome²(squared_eccentricity_earth)
-  @debug "Normalized Earth set to squared_eccentricity_earth=$squared_eccentricity_earth"
+
   getNormalizedEarth()
   return nothing
 end

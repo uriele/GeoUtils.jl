@@ -154,7 +154,7 @@ function parse_vrm_profile(directory::String,file::String)
       regex_dividers=regex=r"^\s{2,4}[0-9]{1,3}";
       regex_title=r"[0-9]{1,3}\s([a-z,A-Z,0-9\+]*)\s?";
       dividers=findall([!isnothing(match.(regex,line)) for line in text])
-      @debug dividers
+
 
       titles=[string(title.captures[1])  for title in match.(regex_title,text[dividers])]
 
@@ -284,8 +284,8 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Da
     if cosθ==0
       return abs(y)-minoraxis_earth
     end
-    @debug "N=$(_NN(θ))"
-    @debug "x/cosθ=$(x/cosθ)"
+
+
     return x/cosθ-_NN(θ)
   end
 
@@ -293,22 +293,19 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Da
     R=_NN(θ)
 
     h=_hh(x,z,θ)
-    @debug "R=$R"
-    @debug "h=$h"
+
+
     return atan(z/x/(1-squared_eccentricity_earth*(R/(R+h))))
   end
 
   maxerror=1e-15
-  @debug "θ=$θ"
+
   θnew=_θ(θ,x,y)
-  @debug "θnew=$θnew"
-  @debug "diff=$(θnew-θ)"
+
+
   while abs(θnew-θ)>maxerror
     θ=θnew
     θnew=_θ(θ,x,y)
-    @debug "θnew=$θnew"
-    @debug "diff=$(θnew-θ)"
-
   end
   return (mod(rad2deg(θnew),360),_hh(x,y,θnew)*majoraxis_earth)
 end
