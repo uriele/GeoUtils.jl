@@ -1,6 +1,4 @@
 abstract type AbstractLocalAtmosphere{Datum,T<:IEEEFloat} end
-const KM{T}=Quantity{T,𝐋,typeof(km)}
-
 """
 
    LocalAtmosphere2D(;pressure::T=101325.0,temperature::T=15.0,height::T=0.0,latitude::T=0.0,x::T=0.0,y::T=0.0) where T<: IEEEFloat
@@ -35,10 +33,6 @@ LocalAtmosphereECEF2D(pressure::T,temperature::T,w::T,z::T) where T = LocalAtmos
 LocalAtmosphere2D(pressure::T,temperature::T,h::T,θ::T) where T = LocalAtmosphereLLA2D(pressure,temperature,h,θ)
 
 
-@inline function _normalize_ellipse!(h::A,majoraxis_earth::T) where A<:AbstractArray{T} where T
-  h./=majoraxis_earth
-  return nothing
-end
 
 
 function read_local_atmosphere(::Type{T},folder::String;
@@ -75,9 +69,9 @@ function read_local_atmosphere(::Type{T},folder::String;
 
   if normalize
 
-    _normalize_ellipse!(h,majoraxis_earth)
+    h./=majoraxis_earth
     setNormalizedEarth(squared_eccentricity_earth)
-    datum=NormalizeEarth
+    datum=NormalizedEarth
 end
 
   StructArray(
@@ -94,12 +88,6 @@ end
 end
 
 read_local_atmosphere(folder::String;kwargs...)=read_local_atmosphere(Float64,folder;kwargs...)
-
-@inline function _convertellipse2cartesian(θ::T,h::T,majoraxis_earth::T,squared_eccentricity_earth::T)::NTuple{2,T} where T
-  N=majoraxis_earth/sqrt(1+squared_eccentricity_earth*sind(θ)*sind(θ))
-  return (N+h)*cosd(θ),(N+h)*sind(θ)
-end
-
 
 """
   discretize_atmosphere(atmosphere::A,levels::Int,radii::Int)::B where {A<:AbstractArray{T},B<:AbstractArray{T}} where T<:AbstractLocalAtmosphere
@@ -140,15 +128,15 @@ abstract type AbstractPressureInterpolation end
 struct LogarithmicPressure<:AbstractPressureInterpolation end
 struct LinearPressure<:AbstractPressureInterpolation end
 
-@inline _interpolation_pt_h(::AbstractPressureInterpolation,knots,pressure,temperature,values,extrapolation_bc)=  throw(ArgumentError("Interpolation not implemented for $(typeof(interpolation))"))
-
-
 @inline function _interpolate_pt_theta(knots,pressure,temperature,values,extrapolation_bc)
   p1=SemiCircularArray(linear_interpolation(knots,pressure,extrapolation_bc=extrapolation_bc)(values));
   t1=SemiCircularArray(linear_interpolation(knots,temperature,extrapolation_bc=extrapolation_bc)(values));
   return ((p1[1:end]+p1[2:end+1])./2,(t1[1:end]+t1[2:end+1])./2)
 end
 
+
+
+@inline _interpolate_pt_h(::IP,knots,pressure,temperature,values,extrapolation_bc) where {IP<:AbstractPressureInterpolation}=  throw(ArgumentError("Interpolation not implemented for $(IP)"))
 
 
 @inline function _interpolate_pt_h(::LinearPressure,knots,pressure,temperature,values,extrapolation_bc)
@@ -311,7 +299,7 @@ CoordRefSystems.ellipsoid(datum::Datum) = ellipsoid(datum)
 
 
 function getNormalizedEarth()
-  NE=ellipsoid(NormalizeEarth)
+  NE=ellipsoid(NormalizedEarth)
 
 
 
@@ -329,11 +317,11 @@ end
 setNormalizedEarth() = setNormalizedEarth(eccentricity²(CoordRefSystems.ellipsoid(WGS84Latest)))
 
 
-abstract type NormalizeEarth🌎 <: RevolutionEllipsoid end
-struct NormalizeEarth<:Datum end
-ellipsoidparams(::Type{NormalizeEarth🌎}) = _NormalizedEarth🌎[]
-ellipsoid(::Type{NormalizeEarth}) = NormalizeEarth🌎
-eccentricity(ellipsoid(NormalizeEarth))
+abstract type NormalizedEarth🌎 <: RevolutionEllipsoid end
+struct NormalizedEarth<:Datum end
+ellipsoidparams(::Type{NormalizedEarth🌎}) = _NormalizedEarth🌎[]
+ellipsoid(::Type{NormalizedEarth}) = NormalizedEarth🌎
+eccentricity(ellipsoid(NormalizedEarth))
 ##############
 # CONVERSIONS
 ##############
@@ -359,21 +347,22 @@ function Base.convert(::Type{LLA2D{Datum}},coords::ECEF2D{Datum,T}) where {T,Dat
   squared_eccentricity_earth = T(eccentricity²(🌎))
   z = ustrip(coords.z)
   p = ustrip(coords.w)
+  return LLA2D{Datum}(_extract_h_from_position(p,z,majoraxis_earth,minoraxis_earth,squared_eccentricity_earth)...)
+end
+
+
+@inline function _extract_h_from_position(p::T,z::T, majoraxis_earth::T,minoraxis_earth::T,squared_eccentricity_earth::T)::Tuple{T,T} where T
   e′² = squared_eccentricity_earth / (1 - squared_eccentricity_earth)
-  ψ = atand(majoraxis_earth * z, minoraxis_earth * p)
-  ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ψ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ψ)^3),360)
-  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
-  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
 
-  N = majoraxis_earth / sqrt(1 - squared_eccentricity_earth * sind(ϕ)^2)
-  ## Fix for the condition cosθ=0, in that case subtract the
-  cosθ=cosd(ϕ)
+  ψ = atan(majoraxis_earth * z, minoraxis_earth * p)
+  ϕ = atan(z + minoraxis_earth * e′² * sin(ψ)^3, p - majoraxis_earth * squared_eccentricity_earth * cos(ψ)^3)
 
+  N = majoraxis_earth / sqrt(1 - squared_eccentricity_earth * sin(ϕ)^2)
+  cosθ=cos(ϕ)
   if cosθ≠0
     h = p/cosθ - N
   else
     h =abs(z)-minoraxis_earth
   end
-
-  return LLA2D{Datum}(h,ϕ)
+  return (h,rad2deg(ϕ))
 end

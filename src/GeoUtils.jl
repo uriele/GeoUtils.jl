@@ -10,7 +10,6 @@ module GeoUtils
   using StaticArrays
   using Interpolations
   using LinearAlgebra: dot,qr,Diagonal
-  using CoordinateTransformations: LinearMap
   using Core.Intrinsics: sqrt_llvm
   using ScopedValues
   using SatelliteToolboxTransformations
@@ -52,10 +51,10 @@ module GeoUtils
   import Base.==
   import Unitful.Length as ULength
   @reexport using CoordRefSystems: majoraxis,minoraxis,ellipsoid,eccentricity²,flattening,eccentricity
+
   include("Utils.jl")
-  const _NormalizedEarth🌎= Ref(ellipsfrome²(eccentricity²(CoordRefSystems.ellipsoid(WGS84Latest))))
-
-
+  include("Ray.jl")
+  include("Intersections.jl")
   include("SemiCircularMatrix.jl")
   include("EarthCenteredInertial.jl")
   include("ReadData.jl")
@@ -70,8 +69,10 @@ module GeoUtils
   export Mathar,Mathar1,Mathar2,Mathar3,Mathar4
   export Ciddor
   export refractive_index
-  export Vec2,Vec3
-  export Ray2D,Ellipsoid
+  export SVec2,SVec3,MVec2,MVec3
+  export AbstractRay,AbstractRay2D,AbstractRay3D
+  export Ray2D,Ray3D,SRay2D,SRay3D,MRay2D,MRay3D
+  export Ellipsoid
   export distance_from_unit_circle,distance_from_segment
   export distance_from_radii
   export h20_ppmv_to_rh
@@ -81,14 +82,14 @@ module GeoUtils
   export EarthCenteredEarthFixed,ECEF
   export ECEF2D,LLA2D
   export  read_local_atmosphere, read_orbit,discretize_atmosphere
-  export NormalizeEarth,ellipsfrome²
+  export NormalizedEarth,ellipsfrome²
   export setNormalizedEarth,getNormalizedEarth
   export LocalAtmosphere2D,LocalAtmosphereECEF2D,LocalAtmosphereLLA2D
   export Orbit,normalize_orbit
   export IntersectionStyle,NoIntersection,IsIntersection
   export LevelIntersection,RadiusIntersection,RadiusLevelIntersection,LevelRadiusIntersection
-  export advance,bend,Interface
-  export create_rays
+  export advance,bend
+  export create_static_rays,create_mutable_rays
   export Radius,get_direction,get_origin
   export getIntersectionObjects
 
@@ -101,12 +102,12 @@ module GeoUtils
   export TopLeftIntersection,TopRightIntersection
   export BottomLeftIntersection,BottomRightIntersection
 
-  export new_intersection
+  export ray_intersection!!,ray_intersection!,ray_intersection
 
   export LogarithmicPressure,LinearPressure,AbstractPressureInterpolation
   export Carlotti,NoAtmosphere,geocentric_to_geodesic_θ
   export create_radii_from_θ,scale_earth_by_h
-  export setDebugIntersection,getDebugIntersection
+  #export setDebugIntersection,getDebugIntersection
   #export AzimuthElevationRange,AER
   #export EastNorthUp,ENU
 end

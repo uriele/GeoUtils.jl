@@ -27,14 +27,14 @@ function initialize_raytracing_plot(h_levels,θ_radii)
     #scatter!(ax,allintersections)
     for h in h_levels
       lines!(ax,[let
-        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
+        convert(ECEF2D{NormalizedEarth},LLA2D{NormalizedEarth}(h,tt)) |>
         x-> (x.w,x.z)
         end
         for tt in LinRange(0,361,1000)])
     end
     for tt in θ_radii
       lines!(ax,[let
-        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
+        convert(ECEF2D{NormalizedEarth},LLA2D{NormalizedEarth}(h,tt)) |>
         x-> (x.w,x.z)
         end
         for h in h_levels])
@@ -114,9 +114,9 @@ x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
 x-> [parse(Float64,y) for y in x] #.+90.0
 
 # normalizetion factor for h_knots
-majoraxis_earth=majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(km,x) |> ustrip
-squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizeEarth))
-reduced_minoraxis_earth=minoraxis(ellipsoid(NormalizeEarth))
+majoraxis_earth=majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(km,x) |> ustrip;
+squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizedEarth));
+reduced_minoraxis_earth=minoraxis(ellipsoid(NormalizedEarth));
 
 
 h_knots="0.000000000000000E+000   3.60000000000000        3.80000000000000
@@ -152,10 +152,9 @@ h_knots="0.000000000000000E+000   3.60000000000000        3.80000000000000
 37.0000000000000        44.0000000000000        68.0000000000000
 68.1500000000000    "  |> x-> split(x,"\n") |> x-> join(x," ") |>
 x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
-x-> [parse(Float64,y) for y in x]./majoraxis_earth
+x-> [parse(Float64,y) for y in x]./majoraxis_earth;
 # Generate discretized atmosphere using the knots
 pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
-
 
 
 ############################################
@@ -174,7 +173,7 @@ refractive=refractive[:,idx270:end+idx270-1]
 h_knots=sort(h_knots;rev=true)
 ##########################################
 lla2=SemiCircularMatrix([let
-      LLA2D{NormalizeEarth}(h,θ) #|> x-> (x.h,x.θ)
+      LLA2D{NormalizedEarth}(h,θ) #|> x-> (x.h,x.θ)
     end
     for h in
       h_knots,θ in θ_knots])  # get coordinates in LLA
@@ -194,9 +193,10 @@ lla2=StructArray(lla2)
 
 # create rays
 orbit=read_orbit("./data_atm/INP_FILES/orbit.dat") |> # read the orbit file
-     o-> normalize_orbit.(o)
-rays= create_rays.(orbit); # create the rays
+     o-> normalize_orbit.(o);
+rays= create_static_rays.(orbit); # create the rays
 
+GeoUtils._generate_rays_information_from_orbit(orbit[1])
 # Find intersection with outmost level
 function find_first_intersection_ellipse(ray::Ray2D, # ray
   n₀,  #refractive index ray
@@ -210,7 +210,7 @@ function find_first_intersection_ellipse(ray::Ray2D, # ray
 
   # find intersection point
   t_intersection=advance(BottomIntersection(),ray,scale_levels[ii])
-
+  @info "t_intersection=$t_intersection"
   # find j on ellipse
   θ,h=geocentric_to_geodesic_θ(ray(t_intersection+GeoUtils.SHIFTORIGIN)...)
 
@@ -246,15 +246,15 @@ end
   z::T=T(NaN)
 end
 Register(flag,w::T,z::T) where T= let
-  lla=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(w,z)) |> x-> (x.h,x.θ)
+  lla=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(w,z)) |> x-> (x.h,x.θ)
   Register{T}(flag,0,w,z,lla...)
 end
 next!(register::Register)= register.iteration+=1
 setTangent!(register::Register,w,z)= begin
   register.w=w
   register.z=z
-  register.h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(w,z)) |> x-> x.h
-  register.θ=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(w,z)) |> x-> x.θ
+  register.h=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(w,z)) |> x-> x.h
+  register.θ=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(w,z)) |> x-> x.θ
   register.flag=true
 end
 setTangent(register::Register,v::AbstractVector{T}) where T = setTangent!(register,v...)
@@ -269,8 +269,8 @@ Base.show(io::IO,register::Register)= begin
 end
 
 #==========#
-_angleme(r::Ray2D) = r(0)-r(1) |> x->(x[2],x[1])  |> x-> atand(x...)
-_angleme(r1::Ray2D,r::Ray2D) = r1(0)-r(0) |> x->(x[2],x[1])  |> x-> atand(x...)
+_angleme(r::R) where R<:AbstractRay2D= r(0)-r(1) |> x->(x[2],x[1])  |> x-> atand(x...)
+_angleme(r1::R1,r::R2) where {R1<:AbstractRay2D,R2<:AbstractRay2D} = r1(0)-r(0) |> x->(x[2],x[1])  |> x-> atand(x...)
 ##############
 
 

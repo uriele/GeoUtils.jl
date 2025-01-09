@@ -2,9 +2,9 @@ using GeoUtils
 using SatelliteToolboxTransformations: date_to_jd
 using Test
 using Aqua
-using Unitful: °,km
+using Unitful: °,km,ustrip
 using CoordRefSystems
-
+include("test_internal_inline.jl")
 include("test_orbit.jl")
 include("test_semicircular.jl")
 

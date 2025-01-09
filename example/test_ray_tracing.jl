@@ -1,4 +1,6 @@
 using GeoUtils
+
+
 const MODEL=Ref{AirModel}(Carlotti())
 const INTERPOLATION=Ref{AbstractPressureInterpolation}(LinearPressure())
 
@@ -12,25 +14,24 @@ getPressureInterpolation()
 getModel()
 #setModel(NoAtmosphere())
 setModel(Carlotti())
-getDebugIntersection()
-# only radii
-#setDebugIntersection(0)
+
 include("initialization_script.jl")
 
 # generate output vectors
-T=Float64
+# T=Float64
 # output rays to be used and avoid overwriting
 #rays1=deepcopy(rays[:])
-rays=rays[:]
-rays1=similar(rays[:])
+rays=rays[:];
+rays1=similar(rays[:]);
+T=eltype(rays.origin[1])
 # position of the tangent point only updated if there is an intersection
-tangent_quote=fill(T(Inf),length(rays1))
-register=Vector{Register}(undef,length(rays1)) # index of the current position of the ray
+tangent_quote=fill(T(Inf),length(rays1));
+register=Vector{Register}(undef,length(rays1)); # index of the current position of the ray
 # index of the current position of the ray
-wedge_index=fill((1,1),length(rays1))
+wedge_index=fill((1,1),length(rays1));
 # find the first int
 
-n₀=1.0
+n₀=T(1.0)
 
 [
   begin
@@ -42,7 +43,7 @@ n₀=1.0
   for (i,ray) in enumerate(rays)
 ];
 
-index=deepcopy(wedge_index)
+index=copy(wedge_index);
 
 @inline code_intersection(ray::Ray2D,index;kwargs...)=
 new_intersection(ray, # ray
@@ -89,21 +90,21 @@ end
 
 using Profile,PProf
 using BenchmarkTools
+using TimerOutputs
   #
-  @profile begin
-  for (ray,local_register,local_index) in zip(rays1,register,index)
+@benchmark   for (ray,local_register,local_index) in zip(rays1,register,index)
     ############################
     local_register=getTangentquote(ray,local_index,local_register;hmax=hmax)
   end
-end
-@profile  begin
-  Threads.@threads for i in eachindex(rays1) #,register,index)
+@benchmark Threads.@threads for i in eachindex(rays1) #,register,index)
     register[i]=getTangentquote(rays1[i],index[i],register[i];hmax=hmax)
   end
-end
-pprof(;webport=57777)
 nt=Threads.nthreads()
 
+
+i=1
+@benchmark     ray,_,h,local_index,previous_intersection=code_intersection(rays1[i],index[i];
+previous_intersection=nothing);
 
 
 figure=Figure()
@@ -265,3 +266,227 @@ for (ii,i) in enumerate(high_error)
 end
 
 save("$(pwd())/output_highest_error.png",fig)
+
+
+using TimerOutputs
+
+to=TimerOutput();
+@inline function new_intersection_timeit(ray::Ray2D, # ray
+  input_index; # wedge index
+  refractive_map, # map of refractive index
+  h_levels, # levels for i
+  θ_radii, # radii angles for j
+  scale_levels, # scaling mapping to unit circle
+  line_radii, # line radii
+  tangent_quote, # tangent quote
+  register,
+  #for debug
+  previous_intersection=nothing) # register
+
+  ###########################
+  n₀= refractive_map[input_index...]
+  ###########################
+  TimerOutputs.@timeit to "advance radii" begin
+      left_radii=line_radii[input_index[2]+ GeoUtils.LEFT_RADIUS_INDEX]
+      right_radii=line_radii[input_index[2]+ GeoUtils.RIGHT_RADIUS_INDEX]
+      t_radius_l=GeoUtils.distance_from_segment(ray,left_radii.PointA,left_radii.PointB)
+      t_radius_r=GeoUtils.distance_from_segment(ray,right_radii.PointA,right_radii.PointB)
+  end
+  TimerOutputs.@timeit to "advance levels" begin
+      scale_top=scale_levels[input_index[1]+ GeoUtils.TOP_LEVEL_INDEX]
+      scale_bottom=scale_levels[input_index[1]+ GeoUtils.BOTTOM_LEVEL_INDEX]
+      t_level_b=GeoUtils._distance_from_unit_circle(scale_bottom.*ray.origin,scale_bottom.*ray.direction)
+      t_level_t=GeoUtils._distance_from_unit_circle(scale_top.*ray.origin,scale_top.*ray.direction)
+  end
+  TimerOutputs.@timeit to "compute which intersection" begin
+    t_radius= min(t_radius_l,t_radius_r)
+    leftright= t_radius_l<t_radius_r ? LeftIntersection() : RightIntersection() # left or right
+    t_level= min(t_level_b,t_level_t)
+
+    bottomtop= t_level_b<t_level_t ? BottomIntersection() : TopIntersection() # bottom or top
+
+
+    radius_or_level=t_radius<t_level ? leftright : bottomtop
+    t_real= min(t_radius,t_level)
+  end
+  n₀=refractive_map[input_index...]
+
+  if isa(radius_or_level,LevelIntersection)
+      TimerOutputs.@timeit to "level intersection" begin
+        n₁,index,h= GeoUtils._intersection_type_levels(bottomtop,input_index,h_levels,refractive_map)
+        normal_direction=(radius_or_level==TopIntersection() ?  GeoUtils.INWARD_NORMAL : GeoUtils.OUTWARD_NORMAL)
+        ray_out,isReflected =  GeoUtils._bend_ellipse(ray,t_real,n₀,n₁,h,normal_direction)
+      end
+  else
+      TimerOutputs.@timeit to "radius intersection" begin
+        n₁,index,h= GeoUtils._intersection_type_radii(leftright,ray(t_real),input_index,h_levels,refractive_map)
+        normal_direction=(radius_or_level==RightIntersection() ?  GeoUtils.INWARD_NORMAL :  GeoUtils.OUTWARD_NORMAL)
+        ray_out,isReflected = GeoUtils._bend_radii(ray,t_real,n₀,n₁,h,normal_direction)
+
+      end
+
+  end
+  index= isReflected ? input_index : index
+  # condition to stop ray tracing
+  #target = 1<index[1]<(length(h_levels)-1)
+  target = false
+  return (ray_out,target,h,index,radius_or_level)
+end
+
+
+@inline function nokwargs_intersection_timeit(ray::Ray2D, # ray
+  input_index, # wedge index
+  refractive_map, # map of refractive index
+  h_levels, # levels for i
+  θ_radii, # radii angles for j
+  scale_levels, # scaling mapping to unit circle
+  line_radii, # line radii
+  tangent_quote, # tangent quote
+  register,
+  #for debug
+  previous_intersection=nothing) # register
+
+  ###########################
+  n₀= refractive_map[input_index...]
+  ###########################
+  TimerOutputs.@timeit to "advance radii" begin
+      left_radii=line_radii[input_index[2]+ GeoUtils.LEFT_RADIUS_INDEX]
+      right_radii=line_radii[input_index[2]+ GeoUtils.RIGHT_RADIUS_INDEX]
+      t_radius_l=GeoUtils.distance_from_segment(ray,left_radii.PointA,left_radii.PointB)
+      t_radius_r=GeoUtils.distance_from_segment(ray,right_radii.PointA,right_radii.PointB)
+  end
+  TimerOutputs.@timeit to "advance levels" begin
+      scale_top=scale_levels[input_index[1]+ GeoUtils.TOP_LEVEL_INDEX]
+      scale_bottom=scale_levels[input_index[1]+ GeoUtils.BOTTOM_LEVEL_INDEX]
+      t_level_b=GeoUtils._distance_from_unit_circle(scale_bottom.*ray.origin,scale_bottom.*ray.direction)
+      t_level_t=GeoUtils._distance_from_unit_circle(scale_top.*ray.origin,scale_top.*ray.direction)
+  end
+  TimerOutputs.@timeit to "compute which intersection" begin
+    t_radius= min(t_radius_l,t_radius_r)
+    leftright= t_radius_l<t_radius_r ? LeftIntersection() : RightIntersection() # left or right
+    t_level= min(t_level_b,t_level_t)
+
+    bottomtop= t_level_b<t_level_t ? BottomIntersection() : TopIntersection() # bottom or top
+
+
+    radius_or_level=t_radius<t_level ? leftright : bottomtop
+    t_real= min(t_radius,t_level)
+  end
+  n₀=refractive_map[input_index...]
+
+  if isa(radius_or_level,LevelIntersection)
+      TimerOutputs.@timeit to "level intersection" begin
+        n₁,index,h= GeoUtils._intersection_type_levels(bottomtop,input_index,h_levels,refractive_map)
+        normal_direction=(radius_or_level==TopIntersection() ?  GeoUtils.INWARD_NORMAL : GeoUtils.OUTWARD_NORMAL)
+        ray_out,isReflected =  GeoUtils._bend_ellipse(ray,t_real,n₀,n₁,h,normal_direction)
+      end
+  else
+      TimerOutputs.@timeit to "radius intersection" begin
+        n₁,index,h= GeoUtils._intersection_type_radii(leftright,ray(t_real),input_index,h_levels,refractive_map)
+        normal_direction=(radius_or_level==RightIntersection() ?  GeoUtils.INWARD_NORMAL :  GeoUtils.OUTWARD_NORMAL)
+        ray_out,isReflected = GeoUtils._bend_radii(ray,t_real,n₀,n₁,h,normal_direction)
+
+      end
+
+  end
+  index= isReflected ? input_index : index
+  # condition to stop ray tracing
+  #target = 1<index[1]<(length(h_levels)-1)
+  target = false
+  return (ray_out,target,h,index,radius_or_level)
+end
+
+nokwargs_intersection_timeit(rays,index)=nokwargs_intersection_timeit(rays,index,refractive,h_levels,θ_radii,scale_levels,line_radii,tangent_quote,register)
+
+function getTangentquote_timeit(ray,local_index,local_register;hmax=hmax,levels=size(h_levels,1)-1)
+  hmin=hmax ;              #every time we start a new ray, we initialize the minimum height to be the maximum height
+  ############################
+  inside_atmosphere=true;  # Initialize the search for the intersection
+  tangent_found = false;   # Initialize the tangent point
+  ############################
+  previous_intersection=BottomIntersection();
+  while inside_atmosphere
+      ray,_,h,local_index,previous_intersection=new_intersection_timeit(ray,local_index;
+        previous_intersection=previous_intersection,# wedge index
+        refractive_map=refractive, # map of refractive index
+        h_levels=h_levels, # levels for i
+        θ_radii=θ_radii, # radii angles for j
+        scale_levels=scale_levels, # scaling mapping to unit circle
+        line_radii=line_radii, # line radii
+        tangent_quote=tangent_quote, # tangent quote
+        register=register);
+
+
+    isouterspace=local_index[1]<1;
+    isearth=local_index[1]>levels;
+
+    inside_atmosphere= !(isouterspace || isearth);
+    @timeit to "update height" begin
+    # update the position of the minimum
+      if hmin>=h
+         hmin=h;
+         next!(local_register)
+      elseif !tangent_found   # if the tangent point is not found
+         setTangent!(local_register,ray.origin...)
+         tangent_found=true;
+      end
+    end
+  end
+  return local_register
+end
+
+
+function nokwargs_getTangentquote_timeit(ray,local_index,local_register;hmax=hmax,levels=size(h_levels,1)-1)
+  hmin=hmax ;              #every time we start a new ray, we initialize the minimum height to be the maximum height
+  ############################
+  inside_atmosphere=true;  # Initialize the search for the intersection
+  tangent_found = false;   # Initialize the tangent point
+  ############################
+  previous_intersection=BottomIntersection();
+  while inside_atmosphere
+      ray,_,h,local_index,previous_intersection=nokwargs_intersection_timeit(ray,local_index)
+
+    isouterspace=local_index[1]<1;
+    isearth=local_index[1]>levels;
+
+    inside_atmosphere= !(isouterspace || isearth);
+    @timeit to "update height" begin
+    # update the position of the minimum
+      if hmin>=h
+         hmin=h;
+         next!(local_register)
+      elseif !tangent_found   # if the tangent point is not found
+         setTangent!(local_register,ray.origin...)
+         tangent_found=true;
+      end
+    end
+  end
+  return local_register
+end
+
+
+hmax=maximum(h_levels)  #initialize the maximum height
+  #
+  for (ray,local_register,local_index) in zip(rays1,register,index)
+    ############################
+    local_register=nokwargs_getTangentquote_timeit(ray,local_index,local_register;hmax=hmax)
+  end
+  show(to, compact = true)
+
+
+
+  left_radii=line_radii[index[1][2]+ GeoUtils.LEFT_RADIUS_INDEX]
+  right_radii=line_radii[index[1][2]+ GeoUtils.RIGHT_RADIUS_INDEX]
+  ray=rays1[1]
+
+  scale_top=scale_levels[index[1][1]+ GeoUtils.TOP_LEVEL_INDEX]
+
+  @profile t_level_b=
+  @code_warntype GeoUtils._distance_from_unit_circle(scale_top.*ray.origin,scale_top.*ray.direction)
+  CoordRefSystems.@cr GeoUtils._distance_from_unit_circle(scale_top.*ray.origin,scale_top.*ray.direction)
+  pprof()
+  @benchmark t_level_b= GeoUtils._distance_from_unit_circle(scale_top.*ray.origin,scale_top.*ray.direction)
+  @benchmark t_radius_l=GeoUtils.distance_from_segment(ray,left_radii.PointA,left_radii.PointB)
+  pprof()
+
+  @benchmark t_radius_r=GeoUtils.distance_from_segment(ray,right_radii.PointA,right_radii.PointB)

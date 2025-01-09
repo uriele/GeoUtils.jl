@@ -33,9 +33,9 @@ function all_files_are_same(directory::String,file::String="in_lat.dat")::Bool
     flag = true
     x=readdir()
 
-    for i in 2:length(x)
-      file1=x[i]*"/"*file
-      file2=x[i-1]*"/"*file
+    for i in eachindex(x[2:end])
+      file1=x[i+1]*"/"*file
+      file2=x[i]*"/"*file
       files_are_same(file1,file2) || return false
     end
     return true
@@ -266,6 +266,8 @@ function ellipsfrome²(squared_eccentricity_earth)
   CoordRefSystems.ellipfromab(1,minoraxis_earth)
 end
 
+const MAXERROR=1e-10
+
 function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Datum,T}
   squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
   majoraxis_earth=majoraxis(ellipsoid(datum))
@@ -284,8 +286,6 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Da
     if cosθ==0
       return abs(y)-minoraxis_earth
     end
-
-
     return x/cosθ-_NN(θ)
   end
 
@@ -298,16 +298,38 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Da
     return atan(z/x/(1-squared_eccentricity_earth*(R/(R+h))))
   end
 
-  maxerror=1e-15
 
   θnew=_θ(θ,x,y)
 
 
-  while abs(θnew-θ)>maxerror
+  while abs(θnew-θ)>MAXERROR
     θ=θnew
     θnew=_θ(θ,x,y)
   end
   return (mod(rad2deg(θnew),360),_hh(x,y,θnew)*majoraxis_earth)
 end
 
-geocentric_to_geodesic_θ(x,y)=geocentric_to_geodesic_θ(NormalizeEarth,x,y)
+geocentric_to_geodesic_θ(x,y)=geocentric_to_geodesic_θ(NormalizedEarth,x,y)
+@inline _fastquadratic(halfB::T,C::T) where T = sqrt_llvm(halfB*halfB-C)
+
+const _NormalizedEarth🌎= Ref(ellipsfrome²(eccentricity²(CoordRefSystems.ellipsoid(WGS84Latest))))
+
+
+const ATOL64 = ScopedValue(1.0e-10)
+const ATOL32 = ScopedValue(1.0f-5)
+
+"""
+    atol(T)
+    atol(x::T)
+
+Absolute tolerance used in algorithms for approximate
+comparison with numbers of type `T`. It is used in the
+source code in calls to the [`isapprox`](@ref) function:
+
+```julia
+isapprox(num1::T, num2::T, atol=atol(T))
+```
+"""
+atol(x) = atol(typeof(x))
+atol(::Type{Float64}) = ATOL64[]
+atol(::Type{Float32}) = ATOL32[]
