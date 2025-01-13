@@ -22,8 +22,9 @@ include("initialization_script.jl")
 # output rays to be used and avoid overwriting
 #rays1=deepcopy(rays[:])
 rays=rays[:];
-rays1=similar(rays[:]);
+rays1=[MRay2D(ray.origin...,ray.direction...) for ray in rays];
 T=eltype(rays.origin[1])
+
 # position of the tangent point only updated if there is an intersection
 tangent_quote=fill(T(Inf),length(rays1));
 register=Vector{Register}(undef,length(rays1)); # index of the current position of the ray
