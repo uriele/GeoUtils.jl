@@ -101,16 +101,29 @@ read_local_atmosphere(folder::String;kwargs...)=read_local_atmosphere(Float64,fo
 end
 
 
+using Interpolations
 """
-  discretize_atmosphere(atmosphere::A,levels::Int,radii::Int)::B where {A<:AbstractArray{T},B<:AbstractArray{T}} where T<:AbstractLocalAtmosphere
-  discretize_atmosphere(atmosphere::A,levels::AbstractVector{V},radii::Int)::B where {A<:AbstractArray{T},B<:AbstractArray{T}} where T<:AbstractLocalAtmosphere
-discretize_atmosphere(atmosphere::A,levels::Int,radii::AbstractVector{V})::B where {A<:AbstractArray{T},B<:AbstractArray{T}} where T<:AbstractLocalAtmosphere
-discretize_atmosphere(atmosphere::A,levels::AbstractVector{V},radii::AbstractVector{V})::B where {Int<V<:Real A<:AbstractArray{T},B<:AbstractArray{T}} where T<:AbstractLocalAtmosphere
+  `discretize_atmosphere(atmosphere::A,levels,radii)`
 
 Discretize the atmosphere into levels and radii.
-"""
 
-using Interpolations
+# Input
+- `atmosphere::A`: The local atmosphere
+- `levels`: The number of levels (can be an integer for linear spacing or a vector for custom spacing)
+- `radii`: The number of radii (can be an integer for linear spacing or a vector for custom spacing)
+
+# Optional arguments
+- `wavelength=10.0`: The wavelength of the light in μm
+- `model=Ciddor()`: The model for the refractive index
+- `interpolation_pressure=LinearPressure()`: The interpolation for the pressure
+
+# Output
+- `pressure`: The pressure in Pa
+- `temperature`: The temperature in °C
+- `refractive`: The refractive index
+
+
+"""
 function discretize_atmosphere(atmosphere::A,levels::Int,radii::Int;kwargs...)   where {A<:AbstractArray{Atm}} where Atm<:AbstractLocalAtmosphere{Datum,T} where {Datum,T}
   h_max=maximum(atmosphere.h)
   θ_max=max(maximum(atmosphere.θ),360)
@@ -368,8 +381,8 @@ function Base.convert(::Type{LLA2D{Datum}},coords::ECEF2D{Datum,T}) where {T,Dat
   N = majoraxis_earth / sqrt(1 - squared_eccentricity_earth * sind(ϕ)^2)
   ## Fix for the condition cosθ=0, in that case subtract the
   cosθ=cosd(ϕ)
-
-  if cosθ≠0
+  @debug "cosθ=$cosθ"
+  if abs(cosθ)>atol(T)
     h = p/cosθ - N
   else
     h =abs(z)-minoraxis_earth

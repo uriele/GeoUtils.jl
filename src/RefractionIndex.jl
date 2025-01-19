@@ -196,8 +196,8 @@ end
 
     σ = ustrip(uconvert(cm^-1,T(1/wavelength)*μm^-1))
     # model parameters
-
-    MATHAR_WAVELENGTHS=sort(T.(_mathar_range(M)))
+  @debug _mathar_range(M)
+    MATHAR_WAVELENGTHS=sort([T.(_mathar_range(M))...])
     MATHAR_PARAMETERS,MATHAR_WAVELENGTH_REF = _const_mathar(M,T)
 
     @inline function _between(x,lower_bound,upper_bound)

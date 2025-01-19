@@ -197,9 +197,10 @@ orbit=read_orbit("./data_atm/INP_FILES/orbit.dat") |> # read the orbit file
      o-> normalize_orbit.(o)
 rays= create_rays.(orbit); # create the rays
 
+
 # Find intersection with outmost level
 function find_first_intersection_ellipse(ray::Ray2D, # ray
-  n₀,  #refractive index ray
+  n₀;  #refractive index ray
   refractive_index_map=refractive, # map of refractive index
   h_levels=h_levels, # levels for i
   θ_radii=θ_radii, # radii angles for j
@@ -258,6 +259,16 @@ setTangent!(register::Register,w,z)= begin
   register.flag=true
 end
 setTangent(register::Register,v::AbstractVector{T}) where T = setTangent!(register,v...)
+
+
+settangentquote!(register::Register,w,z,count)= begin
+  register.w=w
+  register.z=z
+  register.h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(w,z)) |> x-> x.h
+  register.θ=atand(z/w) |> x-> mod(x-90,360)
+  register.iteration=count
+  register.flag=true
+end
 
 Base.show(io::IO,register::Register)= begin
   if register.flag

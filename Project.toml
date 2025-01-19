@@ -5,6 +5,7 @@ version = "0.4.0"
 
 [deps]
 AffineMaps = "2c83c9a8-abf5-4329-a0d7-deffaf474661"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CircularArrays = "7a955b69-7140-5f4e-a0ed-f168c5e2e749"
 CoordRefSystems = "b46f11dc-f210-4604-bfba-323c1ec968cb"
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
@@ -30,6 +31,7 @@ StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 UnitfulData = "479269fd-87c4-43d6-a395-02aad47d928b"
+XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
 
 [weakdeps]
 GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
