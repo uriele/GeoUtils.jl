@@ -47,6 +47,12 @@ struct Ray2D{T<:IEEEFloat}
   end
 end
 
+Ray2D(x::T,y::T,dx::T,dy::T) where T<:IEEEFloat = Ray2D(Vec2(x,y),Vec2(dx,dy))
+
+Ray2D(x::R1,y::R2,dx::R3,dy::R4) where {R1<:Real,R2<:Real,R3<:Real,R4<:Real} = Ray2D(promote(x,y,dx,dy)...)
+Ray2D(x::I,y::I,dx::I,dy::I) where I<:Int = Ray2D(float(x),y,dx,dy)
+Ray2D(T::Type=Float64)=Ray2D(T.(0.0),T.(0.0),T.(1.0),T.(1.0))
+
 function (lm::LinearMap)(r::Ray2D{T}) where T
   return Ray2D(Vec2(lm(r.origin)...),_normalize(Vec2(lm(r.direction)...)))
 end
@@ -297,7 +303,7 @@ const SHIFTORIGIN=1e-12
 end
 
 @inline function _bend_ellipse(ray::Ray2D,t::T, n₀::T,n₁::T, h::T=T(0), outward=1.0) where T
-  squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizeEarth))
+  squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizedEarth))
   ## shift the origin to avoidnumerical issues
 
   (_neworigin,_direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
@@ -308,7 +314,7 @@ end
 
 
 @inline function _bend_radii(ray::Ray2D,t::T, n₀::T,n₁::T, h::T=T(0), outward=1.0) where T
-  squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizeEarth))
+  squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizedEarth))
   (_neworigin,_direction,n₀₁,n₀₁²)=_bend_initialize(ray,t,n₀,n₁)
   N=_tangent_vector(_neworigin...,h,squared_eccentricity_earth).*outward |> x-> x/hypot(x...)
   ray_out,isReflected=_bend_common(_neworigin,_direction,N,n₀₁,n₀₁²)
@@ -423,9 +429,9 @@ end
     create_rays(datum::Datum,orb::Orbit)::Ray2D{T}
     create_rays(orb::Orbit)::Ray2D{T}
 
-Create a ray from the datum and the orbit. If the datum is not provided, it will use the NormalizeEarth datum
+Create a ray from the datum and the orbit. If the datum is not provided, it will use the NormalizedEarth datum
 """
-function create_rays(datum::Datum,orb::Orbit) where Datum
+function create_rays(orb::Orbit)
   (w,z)=(orb.w,orb.z)
   # LIMB ANGLE WITH RESPECT TO CENTER TO THE EARTH
    θ = atan(z/w)
@@ -438,8 +444,56 @@ function create_rays(datum::Datum,orb::Orbit) where Datum
   return Ray2D(Vec2(w,z),_rotation_matrix(angle)*Vec2(tx,ty))
 end
 
-create_rays(orb::Orbit)=create_rays(NormalizeEarth,orb)
 
+
+#### IMPORTANT
+# Temp Structure used to compare the rays
+###########################################
+struct _Ray2{T<:IEEEFloat}
+  x::T
+  y::T
+  dx::T
+  dy::T
+
+  @inline function _Ray2{T}(x,y,dx,dy) where T
+    norm=hypot(dx,dy)
+    return new{T}(x,y,dx,dy)
+  end
+end
+
+_Ray2(x::T,y::T,dx::T,dy::T) where T<:IEEEFloat = _Ray2{T}(x,y,dx,dy)
+_Ray2(x::Real,y::Real,dx::Real,dy::Real) = _Ray2(promote(x,y,dx,dy)...)
+_Ray2(x::I,y::I,dx::I,dy::I) where I<:Int = _Ray2(float(x),y,dx,dy)
+_Ray2(T::Type=Float64)=_Ray2(T(0.0),T(0.0),T(1.0),T(1.0))
+
+###################################################################################
+
+function create_bundle_rays(::Type{T},allorbits::Ao) where {T<:IEEEFloat,Ao<:AbstractArray{O}} where {O<:Orbit}
+  # Preallocation
+  Rays=StructArray(fill(_Ray2(T),size(allorbits)))
+
+  for i in eachindex(Rays)
+
+    ## Make it it's own inline function but with in-place
+    w=allorbits[i].w
+    z=allorbits[i].z
+    # use accessor to write static arrays
+    Rays.x[i]=w
+    Rays.y[i]=z
+    θ = allorbits[i].ang*INWARD_NORMAL
+    tangent_magnitude=hypot(z,w)
+    cosθ=cos(θ)
+    sinθ=sin(θ)
+    tx=z/tangent_magnitude .*INWARD_NORMAL
+    ty=-w/tangent_magnitude .*INWARD_NORMAL
+    Rays.dx[i]=cosθ*tx+sinθ*ty
+    Rays.dy[i]=-sinθ*tx+cosθ*ty
+    ########################################
+  end
+  return Rays
+end
+
+create_bundle_rays(allorbits::Ao) where {Ao<:AbstractArray{O}} where {O<:Orbit{T}} where {T}=create_bundle_rays(T,allorbits)
 
 @inline function _scale_earth_by_h(datum::Datum,h::T) where {Datum,T<:Real}
 Ellipsoid(
@@ -448,7 +502,15 @@ Ellipsoid(
 )
 end
 
-@inline _scale_earth_from_h(h::T) where T<:Real=_scale_earth_by_h(NormalizeEarth,h)
+@inline function _scale_earth_by_h1(datum::Datum,h::T) where {Datum,T<:Real}
+Ellipsoid(
+  majoraxis(ellipsoid(datum))+h,
+  minoraxis(ellipsoid(datum))+h
+).scale
+end
+
+
+@inline _scale_earth_from_h(h::T) where T<:Real=_scale_earth_by_h(NormalizedEarth,h)
 
 @inline function _create_radii_from_θ(datum::Datum, θ::T) where {Datum,T<:Real}
   eccentricity_squared= eccentricity²(ellipsoid(datum))
@@ -456,12 +518,12 @@ end
   direction=_normal_vector(origin...,0,eccentricity_squared)
   return Radius(Ray2D(origin,direction))
 end
-@inline _create_radii_from_θ(θ::T) where T<:Real=_create_radii_from_θ(NormalizeEarth,θ)
+@inline _create_radii_from_θ(θ::T) where T<:Real=_create_radii_from_θ(NormalizedEarth,θ)
 
 create_radii_from_θ(datum::Datum,θ::T) where {Datum,T<:Real}=_create_radii_from_θ(datum,θ)
 create_radii_from_θ(θ::T) where T<:Real=_create_radii_from_θ(θ)
 scale_earth_by_h(datum::Datum,h::T) where {Datum,T<:Real}=_scale_earth_by_h(datum,h)
-scale_earth_by_h(h::T) where T<:Real=_scale_earth_by_h(NormalizeEarth,h)
+scale_earth_by_h(h::T) where T<:Real=_scale_earth_by_h(NormalizedEarth,h)
 
 #########################
 function getIntersectionObjects(lla::AbstractArray{L}) where L<:LLA2D{Datum} where Datum
@@ -483,6 +545,17 @@ function getIntersectionObjects(lla::AbstractArray{L}) where L<:LLA2D{Datum} whe
 
   return h_levels,StructArray(scale_levels).scale,SemiCircularArray(θ_radii),SemiCircularArray(line_radii)
 end
+#
+function getIntersectionObjects(::Datum,h::V1,θ::V2) where {Datum,V1<:AbstractVector{T},V2<:AbstractVector{T}} where T
+
+   scale_levels = Vector{LinearMap}(undef,length(h))
+   line_radii   = Vector{Radius{T}}(undef,length(θ))
+   map!(x->_scale_earth_by_h1(Datum,x) ,scale_levels,h)
+   map!(x->create_radii_from_θ(Datum,x),line_radii,θ)
+
+  return scale_levels,SemiCircularArray(line_radii)
+end
+
 
 const NEARBY_LEFT_INDEX=+1
 const NEARBY_RIGHT_INDEX=-1
@@ -495,7 +568,7 @@ function _intersection_type_radii(lr::LR,position,wedge_index,h_levels,refractiv
 
   index=(wedge_index[1],position_interface_index2)
 
-  h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(position...)) |> x-> x.h
+  h=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(position...)) |> x-> x.h
   n₁=refractive_map[index...]
   # if the last radius was ABOVE the maximum level of stratification,
   # then the ray is in free space and you stop the computation

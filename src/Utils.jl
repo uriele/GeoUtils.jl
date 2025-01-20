@@ -266,7 +266,12 @@ function ellipsfrome²(squared_eccentricity_earth)
   CoordRefSystems.ellipfromab(1,minoraxis_earth)
 end
 
-function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Datum,T}
+@inline function _NN(θrad::T,squared_eccentricity_earth::T)::T where T
+    sinθ=sin(θrad)
+    return 1/sqrt(1-squared_eccentricity_earth*sinθ*sinθ)
+end
+
+function geocentric_xy_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Datum,T}
   squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
   majoraxis_earth=majoraxis(ellipsoid(datum))
   minoraxis_earth=minoraxis(ellipsoid(datum))
@@ -275,9 +280,7 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Da
   y/=majoraxis_earth
   θ=atan(y,x)
 
-  @inline function _NN(θ::T)::T
-    return 1/sqrt(1-squared_eccentricity_earth*sin(θ)^2)
-  end
+
 
   @inline function _hh(x,y,θ)
     cosθ=cos(θ)
@@ -286,7 +289,7 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Da
     end
 
 
-    return x/cosθ-_NN(θ)
+    return x/cosθ-_NN(θ,squared_eccentricity_earth)
   end
 
   @inline function _θ(θ,x,z)
@@ -295,7 +298,7 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Da
     h=_hh(x,z,θ)
 
 
-    return atan(z/x/(1-squared_eccentricity_earth*(R/(R+h))))
+    return atan(z,x*(1-squared_eccentricity_earth*(R/(R+h))))
   end
 
   maxerror=1e-15
@@ -310,4 +313,42 @@ function geocentric_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where {Da
   return (mod(rad2deg(θnew),360),_hh(x,y,θnew)*majoraxis_earth)
 end
 
-geocentric_to_geodesic_θ(x,y)=geocentric_to_geodesic_θ(NormalizeEarth,x,y)
+geocentric_xy_to_geodesic_θ(x,y)=geocentric_xy_to_geodesic_θ(NormalizedEarth,x,y)
+
+#ref: https://www.oc.nps.edu/oc2902w/coord/coordcvt.pdf
+
+
+
+# this finds the equivalent latitude on the surface of the earth h=0
+# given the geocentric latitude θ
+# unlike the angle at an altitude h>0, the result is exact and It
+# does not require an iterative method
+# tanθ_c= (1-e²)tanθ
+@inline function _surface_from_geocentric_θdeg_to_geodesic_θdeg(datum::Datum, θc::T) where {Datum, T}
+  squared_eccentricity_earth = eccentricity²(ellipsoid(datum))
+  y,x= sind(θc),cosd(θc)
+  return mod(atand(y, x*(1 - squared_eccentricity_earth)),360)
+end
+
+# Function to convert geodesic angle to geocentric angle with quadrant information
+@inline function _surface_from_geodesic_θdeg_to_geocentric_θdeg(datum::Datum, θ::T) where {Datum, T}
+  squared_eccentricity_earth = eccentricity²(ellipsoid(datum))
+  y,x= sind(θ),cosd(θ)
+  mod(atand(y*(1 - squared_eccentricity_earth), x),360)
+
+end
+
+@inline function _surface_from_geocentric_θrad_to_geodesic_θrad(datum::Datum, θc::T) where {Datum, T}
+  geodesic_angle = _surface_from_geocentric_θdeg_to_geodesic_θdeg(datum, rad2deg(θc))
+  return deg2rad(geodesic_angle)
+end
+
+@inline function _surface_from_geodesic_θrad_to_geocentric_θrad(datum::Datum, θ::T) where {Datum, T}
+  geocentric_angle = _surface_from_geodesic_θdeg_to_geocentric_θdeg(datum, rad2deg(θ))
+  return deg2rad(geocentric_angle)
+end
+
+_surface_from_geocentric_θdeg_to_geodesic_θdeg(θc::T) where T = _surface_from_geocentric_θdeg_to_geodesic_θdeg(NormalizedEarth, θc)
+_surface_from_geocentric_θrad_to_geodesic_θrad(θc::T) where T = _surface_from_geocentric_θrad_to_geodesic_θrad(NormalizedEarth, θc)
+_surface_from_geodesic_θdeg_to_geocentric_θdeg(θ::T) where T = _surface_from_geodesic_θdeg_to_geocentric_θdeg(NormalizedEarth, θ)
+_surface_from_geodesic_θrad_to_geocentric_θrad(θ::T) where T = _surface_from_geodesic_θrad_to_geocentric_θrad(NormalizedEarth, θ)

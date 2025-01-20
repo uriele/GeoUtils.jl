@@ -32,7 +32,7 @@ end
   end
   @testset "Distante from radius" begin
     for θ in 1:60
-      match_at_1=convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(1.,θ)) |> x-> Vec2([x.w,x.z])
+      match_at_1=convert(ECEF2D{NormalizedEarth},LLA2D{NormalizedEarth}(1.,θ)) |> x-> Vec2([x.w,x.z])
       direction_to_radii=Vec2(-1.0,1.0) |> x->x/hypot(x...)
 
       r=Ray2D(match_at_1.-direction_to_radii,direction_to_radii)

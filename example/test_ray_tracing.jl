@@ -197,7 +197,7 @@ for (iii,refr) in enumerate([refractive_linear_carlotti,refractive_linear_ciddor
 
     hmax=maximum(h_levels)  #initialize the maximum height
 
-    
+
 
     NOPLOT=true
     if !NOPLOT
@@ -271,7 +271,7 @@ for (iii,refr) in enumerate([refractive_linear_carlotti,refractive_linear_ciddor
         else
           refractive[local_index...];
         end;
-        hh,tt=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(r1(0)...)) |> x-> (x.h,x.θ)
+        hh,tt=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(r1(0)...)) |> x-> (x.h,x.θ)
         #@info "hextr: $(hh.*majoraxis_earth),hout: $(h.*majoraxis_earth), hmin: $(hmin.*majoraxis_earth),previous_intersection: $(previous_intersection)"
         #@info "hextr: $(hh.*majoraxis_earth),hout: $(h.*majoraxis_earth), θ_ext: $(tt), hmin: $(hmin.*majoraxis_earth)"
           if hh<hmin
@@ -328,7 +328,7 @@ end
 
 
 (diff_altitude,extdiff,high_error_cartesian)=print_sequence(altitudes[1],orbit;error_limit=0.2)
- 
+
 size(high_error_cartesian)
 
 extrema(diff_altitude./(orbit.h.*majoraxis_earth).*100)
@@ -443,14 +443,14 @@ orb_bigdiff=orbit[findall(abs.(diff_altitude).>0.19)]
 orb_smalldiff=orbit[findall(abs.(diff_altitude).<0.01)]
 
 
-hist!(ax2,[let 
-  convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(o.w,o.z)) |>
+hist!(ax2,[let
+  convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(o.w,o.z)) |>
   o-> o.θ #-90 |> o-> mod(o,360)
 end
 for o in orb_bigdiff],bins=100,color=:values)
 
-hist!(ax3,[let 
-  convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(o.w,o.z)) |>
+hist!(ax3,[let
+  convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(o.w,o.z)) |>
   o-> o.θ #-90 |> o-> mod(o,360)
 end
 for o in orb_smalldiff],bins=100,color=:values)
@@ -498,5 +498,5 @@ x=LinRange(0,360,1000)
   lines!(ax,x1,y1)
   lines!(ax,x2+hx,y2+hy)
 
-  
+
 extrema(@. x1^2+y1^2)

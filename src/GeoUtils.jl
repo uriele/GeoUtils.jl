@@ -15,7 +15,7 @@ module GeoUtils
   using ScopedValues
   using SatelliteToolboxTransformations
   using StructArrays
-
+  using Accessors # @reset
   # Used for define and convert from LLA to ECEF and ECI
   using CoordRefSystems: Deg,Rad
   using CoordRefSystems: Geographic
@@ -26,6 +26,7 @@ module GeoUtils
   using Unitful:𝐋
   using CoordRefSystems:ellipfromab
   using LinearAlgebra: ⋅
+  using Polyester: @batch  # for batch processing
   ####
   #using GeoUtils
   #using CoordRefSystems
@@ -81,7 +82,7 @@ module GeoUtils
   export EarthCenteredEarthFixed,ECEF
   export ECEF2D,LLA2D
   export  read_local_atmosphere, read_orbit,discretize_atmosphere
-  export NormalizeEarth,ellipsfrome²
+  export NormalizedEarth,ellipsfrome²
   export setNormalizedEarth,getNormalizedEarth
   export LocalAtmosphere2D,LocalAtmosphereECEF2D,LocalAtmosphereLLA2D
   export Orbit,normalize_orbit
@@ -104,7 +105,10 @@ module GeoUtils
   export new_intersection
 
   export LogarithmicPressure,LinearPressure,AbstractPressureInterpolation
-  export Carlotti,NoAtmosphere,geocentric_to_geodesic_θ
+  export Carlotti,NoAtmosphere
+  export geocentric_xy_to_geodesic_θ
+  export geodesic_θ_to_geocentric_θ
+  export geocentric_θ_to_geodesic_θ
   export create_radii_from_θ,scale_earth_by_h
   export setDebugIntersection,getDebugIntersection
   #export AzimuthElevationRange,AER

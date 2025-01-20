@@ -77,7 +77,7 @@ function read_local_atmosphere(::Type{T},folder::String;
 
     _normalize_ellipse!(h,majoraxis_earth)
     setNormalizedEarth(squared_eccentricity_earth)
-    datum=NormalizeEarth
+    datum=NormalizedEarth
 end
 
   StructArray(
@@ -146,7 +146,12 @@ function discretize_atmosphere(atmosphere::A,levels::Int,θᵢ::AbstractVector{V
 end
 
 discretize_atmosphere(atmosphere::A,hᵢ::AbstractVector{V},θᵢ::AbstractVector{V};kwargs...) where {A<:AbstractArray{Atm},V} where Atm<:AbstractLocalAtmosphere{Datum,T} where {Datum,T} =
-  _discretize_atmosphere(atmosphere,hᵢ,θᵢ;kwargs...)
+_discretize_atmosphere_lowallocation(
+  view(atmosphere.pressure,:,:),
+  view(atmosphere.temperature,:,:),
+  view(atmosphere.h,:,1),
+  view(atmosphere.θ,1,:),
+  view(hᵢ,:),view(θᵢ,:);kwargs...)
 
 
 abstract type AbstractPressureInterpolation end
@@ -161,6 +166,28 @@ struct LinearPressure<:AbstractPressureInterpolation end
   t1=SemiCircularArray(linear_interpolation(knots,temperature,extrapolation_bc=extrapolation_bc)(values));
   return ((p1[1:end]+p1[2:end+1])./2,(t1[1:end]+t1[2:end+1])./2)
 end
+
+
+@inline function _interpolate_pt_theta!(
+  pressure_interpolated::V,temperature_interpolated::V,
+  knots::K,
+  pressure_discrete::V1,temperature_discrete::V1,
+  values::P,extrapolation_bc) where {V<:AbstractVector{T},V1<:AbstractVector{T},K,P} where T
+
+
+  itp_p=linear_interpolation(knots,pressure_discrete,extrapolation_bc=extrapolation_bc);
+  itp_t=linear_interpolation(knots,temperature_discrete,extrapolation_bc=extrapolation_bc);
+
+  for i in eachindex(values[1:end-1])
+    pressure_interpolated[i]=(itp_p(values[i])+itp_p(values[i+1]))*T(0.5)
+    temperature_interpolated[i]=(itp_t(values[i])+itp_t(values[i+1]))*T(0.5)
+  end
+  pressure_interpolated[end]=(itp_p(values[end])+itp_p(values[1]))*T(0.5)
+  temperature_interpolated[end]=(itp_t(values[end])+itp_t(values[1]))*T(0.5)
+  return nothing
+end
+
+
 
 
 
@@ -189,6 +216,46 @@ end
 
 
 
+@inline function _interpolate_pt_h!(::LinearPressure,
+  pressure_interpolated::V,temperature_interpolated::V,
+  knots::K,
+  pressure_discrete::V1,temperature_discrete::V1,
+  values::P,extrapolation_bc) where {V<:AbstractVector{T},V1<:AbstractVector{T},K,P} where T
+
+  itp_p=linear_interpolation(knots,pressure_discrete,extrapolation_bc=extrapolation_bc);
+  itp_t=linear_interpolation(knots,temperature_discrete,extrapolation_bc=extrapolation_bc);
+
+  for i in eachindex(values[1:end-1])
+    p0=itp_p(values[i])
+    p1=itp_p(values[i+1])
+    pressure_interpolated[i]=p0*exp((log(p1)-log(p0))*T(0.5))
+    temperature_interpolated[i]=(itp_t(values[i])+itp_t(values[i+1]))*T(0.5)
+  end
+
+  return nothing
+end
+
+@inline function _interpolate_pt_h!(::LogarithmicPressure,
+  pressure_interpolated::V,temperature_interpolated::V,
+  knots::K,
+  pressure_discrete::V1,temperature_discrete::V1,
+  values::P,extrapolation_bc) where {V<:AbstractVector{T},V1<:AbstractVector{T},K,P} where T
+
+  itp_lp=linear_interpolation(knots,log.(pressure_discrete),extrapolation_bc=extrapolation_bc);
+  itp_t=linear_interpolation(knots,temperature_discrete,extrapolation_bc=extrapolation_bc);
+
+  for i in eachindex(values[1:end-1])
+    logp1=itp_lp(values[i])
+    logp2=itp_lp(values[i+1])
+    pressure_interpolated[i]=(exp.(logp1)-exp.(logp2))/(logp1-logp2)
+    temperature_interpolated[i]=0.5*(itp_t(values[i])+itp_t(values[i+1]))
+  end
+
+  return nothing
+end
+
+
+
 @inline function _discretize_atmosphere(atmosphere::A,hᵢ::AbstractVector{V},θᵢ::AbstractVector{V};wavelength=10.0,
   model=Ciddor(),
   interpolation_pressure=LinearPressure(),
@@ -202,20 +269,20 @@ end
 
   Press1= Array{T,2}(undef,size(atmosphere,1),radii)
   Temp1 = Array{T,2}(undef,size(atmosphere,1),radii)
+  # Average Across Height (linear for temperature, exponential for pressure)
+  Press_out= Matrix{T}(undef,levels-1,radii)
+  Temp_out = similar(Press_out)
+  Refr_out = similar(Press_out)
 
-  @info "Using $(typeof(interpolation_pressure)) interpolation for pressure along height"
+  @debug "Using $(typeof(interpolation_pressure)) interpolation for pressure along height"
 
   # Average Along Phi (circular interpolation)
   [
    (Press1[i,:],Temp1[i,:]) = _interpolate_pt_theta(θ_knots,atmosphere.pressure[i,:],atmosphere.temperature[i,:],θᵢ,Periodic())
    for i in axes(atmosphere,1)
   ]
-  # Average Across Height (linear for temperature, exponential for pressure)
-    Press_out= Matrix{T}(undef,levels-1,radii)
-    Temp_out = similar(Press_out)
-    Refr_out = similar(Press_out)
 
-    @info "Using $(typeof(model)) model for refractive index"
+    @debug "Using $(typeof(model)) model for refractive index"
     [
     begin
       (parent(Press_out)[:,j],parent(Temp_out)[:,j]) = _interpolate_pt_h(interpolation_pressure,reverse(h_knots),reverse(Press1[:,j]),reverse(Temp1[:,j]),hᵢ,Flat())
@@ -236,6 +303,78 @@ end
     for h in hᵢ, θ in θᵢ])
 end
 
+
+@inline function _discretize_atmosphere_lowallocation(
+  pressure_knots::M,
+  temperature_knots::M,
+  h_knots::V1,θ_knots::V2,hᵢ::G,θᵢ::G;wavelength=10.0,
+  model=Ciddor(),
+  interpolation_pressure=LinearPressure(),
+  kwargs...) where {M<:AbstractMatrix{T},V1<:AbstractVector{T},V2<:AbstractVector{T},G} where T
+
+  idx_h=zeros(Int,length(h_knots))
+  idx_θ=zeros(Int,length(θ_knots))
+  sortperm!(idx_h,h_knots)
+  sortperm!(idx_θ,θ_knots)
+  h_knots.= view(h_knots,idx_h)
+  θ_knots.= view(θ_knots,idx_θ)
+
+
+  pressure_knots.=view(pressure_knots,idx_h,idx_θ)
+  temperature_knots.=view(temperature_knots,idx_h,idx_θ)
+
+
+  sort!(hᵢ;rev=true)
+  sort!(θᵢ;rev=false)
+  radii=length(θᵢ)
+  levels=length(hᵢ)
+
+  pressure_interpolated= SemiCircularMatrix(Matrix{T}(undef,levels-1,radii))
+  temperature_interpolated =SemiCircularMatrix(similar(parent(pressure_interpolated)))
+  refraction_interpolated = SemiCircularMatrix(similar(parent(pressure_interpolated)))
+
+  pressure_interpolated_θ=Matrix{T}(undef,length(h_knots),radii)
+  temperature_interpolated_θ=Matrix{T}(undef,length(h_knots),radii)
+  #write over the radii to update the value
+  for i in axes(pressure_interpolated_θ,1)
+    @inbounds _interpolate_pt_theta!(
+      view(pressure_interpolated_θ,i,:),
+      view(temperature_interpolated_θ,i,:),
+      view(θ_knots,:),
+      view(pressure_knots,i,:),
+      view(temperature_knots,i,:),
+      view(θᵢ,:),
+      Periodic())
+  end
+
+  # Average Across Height (linear for temperature, exponential for pressure)
+
+    @debug "Using $(typeof(model)) model for refractive index"
+
+  for j in axes(refraction_interpolated,2)
+      @inbounds _interpolate_pt_h!(
+        interpolation_pressure,
+        view(pressure_interpolated,:,j),
+        view(temperature_interpolated,:,j),
+        view(h_knots,:),
+        view(pressure_interpolated_θ,:,j),
+        view(temperature_interpolated_θ,:,j),
+        view(hᵢ,:),
+        Flat())
+
+      for i in axes(refraction_interpolated,1)
+          @inbounds refraction_interpolated[i,j]= refractive_index(model;
+          wavelength=wavelength,
+          temperature=temperature_interpolated[i,j],
+          pressure=pressure_interpolated[i,j],CO2ppm=0.0)
+        end
+
+    end
+
+  return pressure_interpolated,temperature_interpolated,
+        refraction_interpolated
+end
+
 struct Orbit{T<:IEEEFloat}
     z::T
     w::T
@@ -244,6 +383,30 @@ struct Orbit{T<:IEEEFloat}
     other::T
 end
 
+
+function __read_orbit(::Type{T},file::String) where T
+  open(file) do f
+    lines=readlines(f)
+
+    pos=findall(x->!isnothing(match(r"^\sSEQUENCE",x)),lines);
+
+    nseq=length(pos)
+    mgeom=parse(Int,lines[pos[1]]+6)
+    orb=Matrix{Orbit{T}}(undef,nseq,mgeom)
+
+
+    for j in 1:mgeom
+      for i in eachindex(pos)
+        sj=pos[i]+7+j
+        orb[i,j]=Orbit(parse.(T,split(lines[sj]))...)
+      end
+    end
+
+   return orb
+  end
+end
+
+__read_orbit(file::String)=_read_orbit(Float64,file)
 
 function read_orbit(::Type{T},file::String) where T
   open(file) do f
@@ -324,7 +487,7 @@ CoordRefSystems.ellipsoid(datum::Datum) = ellipsoid(datum)
 
 
 function getNormalizedEarth()
-  NE=ellipsoid(NormalizeEarth)
+  NE=ellipsoid(NormalizedEarth)
 
 
 
@@ -342,11 +505,11 @@ end
 setNormalizedEarth() = setNormalizedEarth(eccentricity²(CoordRefSystems.ellipsoid(WGS84Latest)))
 
 
-abstract type NormalizeEarth🌎 <: RevolutionEllipsoid end
-struct NormalizeEarth<:Datum end
-ellipsoidparams(::Type{NormalizeEarth🌎}) = _NormalizedEarth🌎[]
-ellipsoid(::Type{NormalizeEarth}) = NormalizeEarth🌎
-eccentricity(ellipsoid(NormalizeEarth))
+abstract type NormalizedEarth🌎 <: RevolutionEllipsoid end
+struct NormalizedEarth<:Datum end
+ellipsoidparams(::Type{NormalizedEarth🌎}) = _NormalizedEarth🌎[]
+ellipsoid(::Type{NormalizedEarth}) = NormalizedEarth🌎
+eccentricity(ellipsoid(NormalizedEarth))
 ##############
 # CONVERSIONS
 ##############

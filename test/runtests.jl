@@ -2,11 +2,13 @@ using GeoUtils
 using SatelliteToolboxTransformations: date_to_jd
 using Test
 using Aqua
-using Unitful: °,km
+using Unitful: °,km,ustrip
 using CoordRefSystems
 
 include("test_orbit.jl")
 include("test_semicircular.jl")
+
+include("test_interpolation.jl")
 
 const alt_99= [120.0, 119.0, 118.0, 117.0, 116.0, 115.0, 114.0, 113.0, 112.0, 111.0,
   110.0, 109.0, 108.0, 107.0, 106.0, 105.0, 104.0, 103.0, 102.0, 101.0, 100.0, 99.0, 98.0,

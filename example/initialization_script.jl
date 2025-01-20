@@ -27,14 +27,14 @@ function initialize_raytracing_plot(h_levels,θ_radii)
     #scatter!(ax,allintersections)
     for h in h_levels
       lines!(ax,[let
-        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
+        convert(ECEF2D{NormalizedEarth},LLA2D{NormalizedEarth}(h,tt)) |>
         x-> (x.w,x.z)
         end
         for tt in LinRange(0,361,1000)])
     end
     for tt in θ_radii
       lines!(ax,[let
-        convert(ECEF2D{NormalizeEarth},LLA2D{NormalizeEarth}(h,tt)) |>
+        convert(ECEF2D{NormalizedEarth},LLA2D{NormalizedEarth}(h,tt)) |>
         x-> (x.w,x.z)
         end
         for h in h_levels])
@@ -44,9 +44,9 @@ end
 
 ########
 # Read atmosphere
-atmosphere=read_local_atmosphere("./data_atm/INP_FILES")
+atmosphere=read_local_atmosphere("./data_atm/INP_FILES");
 
-θ_knots=" 0.00      1.00      2.00      3.00      4.00      5.00      6.00
+θᵢ=" 0.00      1.00      2.00      3.00      4.00      5.00      6.00
 7.00      8.00      9.00     10.00     11.00     12.00     13.00
 14.00     15.00     16.00     17.00     18.00     19.00     20.00
 21.00     22.00     23.00     24.00     25.00     26.00     27.00
@@ -111,15 +111,16 @@ atmosphere=read_local_atmosphere("./data_atm/INP_FILES")
 349.00    350.00    351.00    352.00    353.00    354.00    355.00
 356.00    357.00    358.00    359.00" |> x-> split(x,"\n") |> x-> join(x," ") |>
 x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
-x-> [parse(Float64,y) for y in x] #.+90.0
+x-> [parse(Float64,y) for y in x]; #.+90.0
 
 # normalizetion factor for h_knots
-majoraxis_earth=majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(km,x) |> ustrip
-squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizeEarth))
-reduced_minoraxis_earth=minoraxis(ellipsoid(NormalizeEarth))
+majoraxis_earth=majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(km,x) |> ustrip;
+
+squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizedEarth));
+reduced_minoraxis_earth=minoraxis(ellipsoid(NormalizedEarth));
 
 
-h_knots="0.000000000000000E+000   3.60000000000000        3.80000000000000
+hᵢ="0.000000000000000E+000   3.60000000000000        3.80000000000000
 4.00000000000000        4.20000000000000        4.40000000000000
 4.60000000000000        4.80000000000000        5.00000000000000
 5.20000000000000        5.40000000000000        5.60000000000000
@@ -152,52 +153,60 @@ h_knots="0.000000000000000E+000   3.60000000000000        3.80000000000000
 37.0000000000000        44.0000000000000        68.0000000000000
 68.1500000000000    "  |> x-> split(x,"\n") |> x-> join(x," ") |>
 x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
-x-> [parse(Float64,y) for y in x]./majoraxis_earth
+x-> [parse(Float64,y) for y in x]./majoraxis_earth;
 # Generate discretized atmosphere using the knots
-pressure,temperature,refractive,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
-
-
+pressure,temperature,refractive=discretize_atmosphere(atmosphere,hᵢ,θᵢ; model=MODEL[],interpolation_pressure=INTERPOLATION[])
 
 ############################################
 # get coordinates in LLA and ECEF
 #########################################
-idx270=findfirst(θ_knots.==90.0+180)
-θ_knots=SemiCircularVector(θ_knots) |> x->  x[idx270:end+idx270-1]
-θ_knots
-θ_knots.+=90.0
-θ_knots=mod.(θ_knots,360.0)
-pressure=pressure[:,idx270:end+idx270-1]
-temperature=temperature[:,idx270:end+idx270-1]
-refractive=refractive[:,idx270:end+idx270-1]
+idx270=findfirst(θᵢ.==90.0+180)
+θᵢ=SemiCircularVector(θ_knots) |> x->  x[idx270:end+idx270-1]
+
+θᵢ.+=90.0
+θᵢ.=mod.(θᵢ,360.0)
+pressure.=pressure[:,idx270:end+idx270-1]
+temperature.=temperature[:,idx270:end+idx270-1]
+refractive.=refractive[:,idx270:end+idx270-1]
 ##########################################
 # Used reversed in discretize_atmosphere
-h_knots=sort(h_knots;rev=true)
+sort!(hᵢ;rev=true)
 ##########################################
-lla2=SemiCircularMatrix([let
-      LLA2D{NormalizeEarth}(h,θ) #|> x-> (x.h,x.θ)
-    end
-    for h in
-      h_knots,θ in θ_knots])  # get coordinates in LLA
 
-
-##############################################################################
-##################################################
-# get coordinates in LLA and ECEF
-lla2=StructArray(lla2)
-# create the intersection objects (radii and levels)
+# I will not need it in the new code, only the angle and the height is required
 (
-  h_levels,
-  scale_levels,
-  θ_radii,
-  line_radii
-)=getIntersectionObjects(lla2);
+  scale_levels2,
+  line_radii2
+)=getIntersectionObjects(NormalizedEarth(),hᵢ,θᵢ)
+# although I will need a new structure for the angles
+
+θᵢ_effective= GeoUtils._surface_from_geocentric_θdeg_to_geodesic_θdeg.(θᵢ)
 
 # create rays
-orbit=read_orbit("./data_atm/INP_FILES/orbit.dat") |> # read the orbit file
-     o-> normalize_orbit.(o)
+#@benchmark orbit=read_orbit("./data_atm/INP_FILES/orbit.dat")
+orbit1=GeoUtils.__read_orbit("./data_atm/INP_FILES/orbit.dat")
+normalize_orbit.(orbit1)
+#|> # read the orbit file
+orbit=read_orbit("./data_atm/INP_FILES/orbit.dat")
+     o-> normalize_orbit.(o);
 rays= create_rays.(orbit); # create the rays
 
+typeof(orbit1)
 
+####### TO DO CHECK NEW STRUCTURE _Ray2 instead of Ray2D
+#
+#
+#
+###########################################################
+
+@benchmark rays1=GeoUtils.create_bundle_rays(Float64,orbit[:])
+
+
+
+@benchmark rays= create_rays.(orbit) # create the rays
+
+isa(orbit,AbstractArray)
+eltype(orbit)
 # Find intersection with outmost level
 function find_first_intersection_ellipse(ray::Ray2D, # ray
   n₀;  #refractive index ray
@@ -213,7 +222,7 @@ function find_first_intersection_ellipse(ray::Ray2D, # ray
   t_intersection=advance(BottomIntersection(),ray,scale_levels[ii])
 
   # find j on ellipse
-  θ,h=geocentric_to_geodesic_θ(ray(t_intersection+GeoUtils.SHIFTORIGIN)...)
+  θ,h=geocentric_xy_to_geodesic_θ(ray(t_intersection+GeoUtils.SHIFTORIGIN)...)
 
   #θ=ray(t_intersection) |> x-> atand(x[2],x[1]) |> x-> mod(x,360)
   #@info "θ=$θ h=$h h=$(h_levels_max)"
@@ -247,15 +256,15 @@ end
   z::T=T(NaN)
 end
 Register(flag,w::T,z::T) where T= let
-  lla=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(w,z)) |> x-> (x.h,x.θ)
+  lla=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(w,z)) |> x-> (x.h,x.θ)
   Register{T}(flag,0,w,z,lla...)
 end
 next!(register::Register)= register.iteration+=1
 setTangent!(register::Register,w,z)= begin
   register.w=w
   register.z=z
-  register.h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(w,z)) |> x-> x.h
-  register.θ=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(w,z)) |> x-> x.θ
+  register.h=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(w,z)) |> x-> x.h
+  register.θ=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(w,z)) |> x-> x.θ
   register.flag=true
 end
 setTangent(register::Register,v::AbstractVector{T}) where T = setTangent!(register,v...)
@@ -264,7 +273,7 @@ setTangent(register::Register,v::AbstractVector{T}) where T = setTangent!(regist
 settangentquote!(register::Register,w,z,count)= begin
   register.w=w
   register.z=z
-  register.h=convert(LLA2D{NormalizeEarth},ECEF2D{NormalizeEarth}(w,z)) |> x-> x.h
+  register.h=convert(LLA2D{NormalizedEarth},ECEF2D{NormalizedEarth}(w,z)) |> x-> x.h
   register.θ=atand(z/w) |> x-> mod(x-90,360)
   register.iteration=count
   register.flag=true
