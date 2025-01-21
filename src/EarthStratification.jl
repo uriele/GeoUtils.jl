@@ -375,13 +375,36 @@ end
         refraction_interpolated
 end
 
-struct Orbit{T<:IEEEFloat}
+struct SatOrbit{T<:IEEEFloat}
     z::T
     w::T
     ang::T
     h::T
-    other::T
+    orbital_coordinate::T
+    _normalized::Bool
+    _islimb::Bool
+
+    @inline SatOrbit{T}(z::T,w::T,ang::T,h::T,other::T,normalized::Bool=false,islimb::Bool=true) where T = new(z,w,ang,h,other,normalized,islimb)
 end
+
+"""
+  SatOrbit(z,w,ang,h,orbital_coordinate)
+
+Define an orbit for the satellite
+"""
+SatOrbit(z::T,w::T,ang::T,h::T,orbital_coordinate::T) where T<:IEEEFloat = SatOrbit{T}(z,w,ang,h,orbital_coordinate)
+SatOrbit(z::I,w::I,ang::I,h::I,orbital_coordinate::I) where I<:Integer = SatOrbit(float.([z,w,ang,h,orbital_coordinate])...)
+SatOrbit(z::Real,w::Real,ang::Real,h::Real,orbital_coordinate::Real) = SatOrbit(promote(z,w,ang,h,orbital_coordinate)...)
+SatOrbit(z::KM,w::KM,ang,h::KM,orbital_coordinate) = SatOrbit(ustrip(z),ustrip(w),ang,ustrip(h),orbital_coordinate)
+SatOrbit(z::Unitful.Length,w::Unitful.Length,ang,h::Unitful.Length,orbital_coordinate) =
+SatOrbit(uconvert(km,z),uconvert(km,w),ang,uconvert(km,h),orbital_coordinate)
+
+altitude(o::SatOrbit) = o.h
+satellite_angle(o::SatOrbit) = o.ang
+orbital_coordinate(o::SatOrbit) = o.orbital_coordinate
+islimb(o::SatOrbit) = o._islimb
+isnadir(o::SatOrbit) = !o._islimb
+
 
 
 function __read_orbit(::Type{T},file::String) where T
@@ -391,22 +414,22 @@ function __read_orbit(::Type{T},file::String) where T
     pos=findall(x->!isnothing(match(r"^\sSEQUENCE",x)),lines);
 
     nseq=length(pos)
-    mgeom=parse(Int,lines[pos[1]]+6)
-    orb=Matrix{Orbit{T}}(undef,nseq,mgeom)
-
+    mgeom=parse(Int,lines[pos[1]+6])
+    orb=Matrix{SatOrbit{T}}(undef,nseq,mgeom)
 
     for j in 1:mgeom
+      jj=7+j
       for i in eachindex(pos)
-        sj=pos[i]+7+j
-        orb[i,j]=Orbit(parse.(T,split(lines[sj]))...)
+        sj=pos[i]+jj
+        orb[i,j]=SatOrbit(parse.(T,split(lines[sj]))...)
       end
     end
 
-   return orb
+    return orb
   end
 end
 
-__read_orbit(file::String)=_read_orbit(Float64,file)
+__read_orbit(file::String)=__read_orbit(Float64,file)
 
 function read_orbit(::Type{T},file::String) where T
   open(file) do f
@@ -418,11 +441,11 @@ function read_orbit(::Type{T},file::String) where T
       [(init_seq+2+6:init_seq+1+6+len_seq) for (init_seq,len_seq) in zip(x[1],x[3])]
     end)
 
-    orb=Matrix{Orbit{T}}(undef,nseq,maximum(mgeom))
+    orb=Matrix{SatOrbit{T}}(undef,nseq,maximum(mgeom))
 
 
    [let
-      [orb[i,j]=Orbit(parse.(T,split(lines[sj]))...) for (j,sj) in enumerate(seq[i])]
+      [orb[i,j]=SatOrbit(parse.(T,split(lines[sj]))...) for (j,sj) in enumerate(seq[i])]
    end
    for i in eachindex(seq)
    ]
@@ -433,123 +456,40 @@ end
 read_orbit(file::String)=read_orbit(Float64,file)
 
 
-function normalize_orbit(datum::Datum,orbit::O) where {Datum,O<:Orbit{T}} where T
+"""
+  normalize_orbit!([datum=WGS84Latest],sorbit::StructArray{SatOrbit})
+
+Normalize in-place the orbit with respect to the Earth's major axis.
+
+Note: sorbit is a StructArray of SatOrbit (SatOrbit is an immutable struct).
+"""
+function normalize_orbit!(datum::Datum,orbit::Ao) where {Datum,Ao<:StructArray{O}} where O<:SatOrbit{T} where T
+  majoraxis_earth= majoraxis(ellipsoid(datum)) |> ma-> uconvert(km,ma) |> ustrip
+  for i in eachindex(orbit)
+    orbit._normalized[i]==true && continue
+    orbit.w[i]/=majoraxis_earth
+    orbit.z[i]/=majoraxis_earth
+    orbit.h[i]/=majoraxis_earth
+    orbit._normalized[i]=true
+  end
+  return nothing
+end
+normalize_orbit!(orbit::Ao)  where {Ao<:StructArray{O}} where O<:SatOrbit{T} where T = normalize_orbit!(WGS84Latest,orbit)
+
+
+"""
+  normalize_orbit([datum=WGS84Latest],orbit::SatOrbit)
+
+Normalize the orbit with respect to the Earth's major axis.
+"""
+
+function normalize_orbit(datum::Datum,orbit::O) where {Datum,O<:SatOrbit{T}} where T
+
+  orbit._normalized==true && return orbit
   majoraxis_earth= majoraxis(ellipsoid(datum)) |> ma-> uconvert(km,ma) |> ustrip
   w_orbit= orbit.w/majoraxis_earth
   z_orbit= orbit.z/majoraxis_earth
   h_orbit= orbit.h/majoraxis_earth
-  return Orbit(z_orbit,w_orbit,orbit.ang,h_orbit,orbit.other)
+  return SatOrbit{T}(z_orbit,w_orbit,orbit.ang,h_orbit,orbit.orbital_coordinate,true)
 end
-normalize_orbit(orbit::O) where O<:Orbit{T} where T = normalize_orbit(WGS84Latest,orbit)
-
-struct ECEF2D{Datum,T<:IEEEFloat}
-  w::T
-  z::T
-end
-
-ECEF2D{Datum}(x::T,y::T) where {Datum,T<:IEEEFloat} =ECEF2D{Datum,T}(x,y)
-ECEF2D{Datum}(x::Number,y::Number) where Datum = ECEF2D{Datum,float{Number}}(promote(x,y)...)
-ECEF2D{Datum}(x::L1,y::L2) where {L1<:ULength,L2<:ULength,Datum} = ECEF2D{Datum}(ustrip(uconvert(km,x)),ustrip(uconvert(km,y)))
-ECEF2D{Datum}(x::L,y::Number) where {L<:ULength,Datum} = ECEF2D{Datum}(ustrip(uconvert(km,x)),y)
-ECEF2D{Datum}(x::Number,y::L) where {L<:ULength,Datum} = ECEF2D{Datum}(x,ustrip(uconvert(km,y)))
-
-ECEF2D(x,y) = ECEF2D{WGS84Latest}(x,y)
-
-
-Base.convert(::Type{ECEF2D{T,Datum}},coords::ECEF2D{Datum}) where {T,Datum} = ECEF2D{T,Datum}(coords.w,coords.z)
-CoordRefSystems.constructor(::Type{<:ECEF2D{Datum}}) where {Datum} = ECEF2D{Datum}
-==(coords₁::ECEF2D{Datum},coord₂::ECEF2D{Datum}) where {Datum}=
-coords₁.z==coord₂.z && coords₁.w==coord₂.w
-
-struct LLA2D{Datum,T<:IEEEFloat}
-  h::T
-  θ::T
-end
-
-
-LLA2D{Datum}(h::T,θ::T) where {Datum,T<:IEEEFloat} =LLA2D{Datum,T}(h,mod(θ,360))
-LLA2D{Datum}(h::Number,θ::Number) where Datum = LLA2D{Datum,float(Number)}(promote(h,mod(θ,360))...)
-LLA2D{Datum}(h::L,θ::Number) where {L<:ULength,Datum} = LLA2D{Datum}(ustrip(uconvert(km,h)),θ)
-LLA2D{Datum}(h::Number,θ::D) where {D<:Deg,Datum} = LLA2D{Datum}(h,ustrip(θ))
-LLA2D{Datum}(h::L,θ::D) where {L<:ULength,D<:Deg,Datum} = LLA2D{Datum}(ustrip(uconvert(km,h)),ustrip(θ))
-LLA2D{Datum}(h::Number,θ::R) where {R<:Rad,Datum} = LLA2D{Datum}(h,ustrip(uconvert(°,θ)))
-LLA2D{Datum}(h::L,θ::R) where {L<:ULength,R<:Rad,Datum} = LLA2D{Datum}(ustrip(uconvert(km,h)),ustrip(uconvert(°,θ)))
-
-LLA2D(h::T,θ::T) where T<:IEEEFloat = LLA2D{WGS84Latest,T}(h,θ)
-
-
-Base.convert(::Type{LLA2D{T,Datum}},coords::LLA2D{Datum}) where {T,Datum} = LLA2D{T,Datum}(coords.h,coords.θ)
-CoordRefSystems.constructor(::Type{<:LLA2D{Datum}}) where {Datum} = LLA2D{Datum}
-==(coords₁::LLA2D{Datum},coord₂::LLA2D{Datum}) where {Datum}=
-coords₁.h==coord₂.h && coords₁.θ==coord₂.θ
-
-CoordRefSystems.ellipsoid(datum::Datum) = ellipsoid(datum)
-
-
-function getNormalizedEarth()
-  NE=ellipsoid(NormalizedEarth)
-
-
-
-  return _NormalizedEarth🌎[]
-end
-
-
-function setNormalizedEarth(squared_eccentricity_earth::T) where T<:IEEEFloat
-  @assert(0<=(squared_eccentricity_earth)<=1, "The eccentricity squared must be between 0 and 1")
-  _NormalizedEarth🌎[]=ellipsfrome²(squared_eccentricity_earth)
-
-  getNormalizedEarth()
-  return nothing
-end
-setNormalizedEarth() = setNormalizedEarth(eccentricity²(CoordRefSystems.ellipsoid(WGS84Latest)))
-
-
-abstract type NormalizedEarth🌎 <: RevolutionEllipsoid end
-struct NormalizedEarth<:Datum end
-ellipsoidparams(::Type{NormalizedEarth🌎}) = _NormalizedEarth🌎[]
-ellipsoid(::Type{NormalizedEarth}) = NormalizedEarth🌎
-eccentricity(ellipsoid(NormalizedEarth))
-##############
-# CONVERSIONS
-##############
-
-function Base.convert(::Type{ECEF2D{Datum}},coords::LLA2D{Datum,T}) where {T,Datum}
-  🌎 = ellipsoid(Datum)
-  majoraxis_earth = majoraxis(🌎) |> ustrip
-  squared_eccentricity_earth= eccentricity²(🌎)
-  h=ustrip(coords.h)
-  θ=ustrip(coords.θ)
-  sinθ=sind(θ)
-  cosθ=cosd(θ)
-  N=majoraxis_earth/sqrt(1-squared_eccentricity_earth*sinθ*sinθ)
-  w=(N+h)*cosθ
-  z=(N*(1-squared_eccentricity_earth)+h)*sinθ
-  return ECEF2D{Datum}(w,z)
-end
-
-function Base.convert(::Type{LLA2D{Datum}},coords::ECEF2D{Datum,T}) where {T,Datum}
-  🌎 = ellipsoid(Datum)
-  majoraxis_earth = T(ustrip(majoraxis(🌎)))
-  minoraxis_earth = T(ustrip(minoraxis(🌎)))
-  squared_eccentricity_earth = T(eccentricity²(🌎))
-  z = ustrip(coords.z)
-  p = ustrip(coords.w)
-  e′² = squared_eccentricity_earth / (1 - squared_eccentricity_earth)
-  ψ = atand(majoraxis_earth * z, minoraxis_earth * p)
-  ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ψ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ψ)^3),360)
-  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
-  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
-
-  N = majoraxis_earth / sqrt(1 - squared_eccentricity_earth * sind(ϕ)^2)
-  ## Fix for the condition cosθ=0, in that case subtract the
-  cosθ=cosd(ϕ)
-  @debug "cosθ=$cosθ"
-  if abs(cosθ)>atol(T)
-    h = p/cosθ - N
-  else
-    h =abs(z)-minoraxis_earth
-  end
-
-  return LLA2D{Datum}(h,ϕ)
-end
+normalize_orbit(orbit::O) where O<:SatOrbit{T} where T = normalize_orbit(WGS84Latest,orbit)

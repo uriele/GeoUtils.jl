@@ -7,7 +7,7 @@ using CoordRefSystems
 
 include("test_orbit.jl")
 include("test_semicircular.jl")
-
+include("test_utils.jl")
 include("test_interpolation.jl")
 
 const alt_99= [120.0, 119.0, 118.0, 117.0, 116.0, 115.0, 114.0, 113.0, 112.0, 111.0,

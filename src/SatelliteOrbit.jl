@@ -19,9 +19,9 @@ atol(::Type{Float64}) = ATOL64[]
 atol(::Type{Float32}) = ATOL32[]
 
 
-const Vec3{T} = SVector{3,T}
+const Vec3{T} = MVector{3,T}
 
-const Vec2{T} = SVector{2,T}
+const Vec2{T} = MVector{2,T}
 
 const Vec2(x::T,y::T=T(0)) where T<:Number=Vec2{T}(x,y)
 const Vec3(x::T,y::T=T(0),z::T=T(0)) where T<:Number=Vec3{T}(x,y,z)
@@ -426,12 +426,12 @@ end
 # Create Rays from the orbit
 
 """
-    create_rays(datum::Datum,orb::Orbit)::Ray2D{T}
-    create_rays(orb::Orbit)::Ray2D{T}
+    create_rays(datum::Datum,orb::SatOrbit)::Ray2D{T}
+    create_rays(orb::SatOrbit)::Ray2D{T}
 
 Create a ray from the datum and the orbit. If the datum is not provided, it will use the NormalizedEarth datum
 """
-function create_rays(orb::Orbit)
+function create_rays(orb::SatOrbit)
   (w,z)=(orb.w,orb.z)
   # LIMB ANGLE WITH RESPECT TO CENTER TO THE EARTH
    θ = atan(z/w)
@@ -468,7 +468,7 @@ _Ray2(T::Type=Float64)=_Ray2(T(0.0),T(0.0),T(1.0),T(1.0))
 
 ###################################################################################
 
-function create_bundle_rays(::Type{T},allorbits::Ao) where {T<:IEEEFloat,Ao<:AbstractArray{O}} where {O<:Orbit}
+function create_bundle_rays(::Type{T},allorbits::Ao) where {T<:IEEEFloat,Ao<:AbstractArray{O}} where {O<:SatOrbit}
   # Preallocation
   Rays=StructArray(fill(_Ray2(T),size(allorbits)))
 
@@ -493,7 +493,7 @@ function create_bundle_rays(::Type{T},allorbits::Ao) where {T<:IEEEFloat,Ao<:Abs
   return Rays
 end
 
-create_bundle_rays(allorbits::Ao) where {Ao<:AbstractArray{O}} where {O<:Orbit{T}} where {T}=create_bundle_rays(T,allorbits)
+create_bundle_rays(allorbits::Ao) where {Ao<:AbstractArray{O}} where {O<:SatOrbit{T}} where {T}=create_bundle_rays(T,allorbits)
 
 @inline function _scale_earth_by_h(datum::Datum,h::T) where {Datum,T<:Real}
 Ellipsoid(

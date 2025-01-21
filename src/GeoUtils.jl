@@ -62,7 +62,8 @@ module GeoUtils
   include("ReadData.jl")
   include("RefractionIndex.jl")
   include("EarthStratification.jl")
-  include("Orbit.jl")
+  include("SatelliteOrbit.jl")
+  include("IOUtils.jl")
   export get_data,convert_to_array,fix_latitudes
   export RealNumber,isRealNumber,isNotRealNumber
   export latitude,longitude,altitude
@@ -85,7 +86,7 @@ module GeoUtils
   export NormalizedEarth,ellipsfrome²
   export setNormalizedEarth,getNormalizedEarth
   export LocalAtmosphere2D,LocalAtmosphereECEF2D,LocalAtmosphereLLA2D
-  export Orbit,normalize_orbit
+  export SatOrbit,normalize_orbit,normalize_orbit!
   export IntersectionStyle,NoIntersection,IsIntersection
   export LevelIntersection,RadiusIntersection,RadiusLevelIntersection,LevelRadiusIntersection
   export advance,bend,Interface
@@ -107,8 +108,11 @@ module GeoUtils
   export LogarithmicPressure,LinearPressure,AbstractPressureInterpolation
   export Carlotti,NoAtmosphere
   export geocentric_xy_to_geodesic_θ
-  export geodesic_θ_to_geocentric_θ
-  export geocentric_θ_to_geodesic_θ
+
+  export convert_surface_angle_geocentric_to_geodesic_deg,convert_surface_angle_geocentric_to_geodesic_rad
+  export convert_surface_angle_geodesic_to_geocentric_deg,convert_surface_angle_geodesic_to_geocentric_rad
+  export convert_surface_angle_geocentric_to_geodesic_deg!,convert_surface_angle_geocentric_to_geodesic_rad!
+  export convert_surface_angle_geodesic_to_geocentric_deg!,convert_surface_angle_geodesic_to_geocentric_rad!
   export create_radii_from_θ,scale_earth_by_h
   export setDebugIntersection,getDebugIntersection
   #export AzimuthElevationRange,AER

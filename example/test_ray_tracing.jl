@@ -1,24 +1,3 @@
-using GeoUtils
-
-using DataFrames
-using Unitful:°,hPa
-const MODEL=Ref{AirModel}(Carlotti())
-const INTERPOLATION=Ref{AbstractPressureInterpolation}(LinearPressure())
-
-setModel(A::AirModel)= MODEL[]=A
-getModel()=MODEL[]
-setModel()=MODEL[]=(Carlotti())
-setPressureInterpolation(A::AbstractPressureInterpolation)= INTERPOLATION[]=A
-setPressureInterpolation()= INTERPOLATION[]=(LinearPressure())
-getPressureInterpolation()=INTERPOLATION[]
-getPressureInterpolation()
-getModel()
-
-#setModel(NoAtmosphere())
-setModel(Carlotti())
-getDebugIntersection()
-# only radii
-#setDebugIntersection(0)
 include("initialization_script.jl")
 
 

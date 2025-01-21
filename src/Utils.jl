@@ -325,13 +325,15 @@ geocentric_xy_to_geodesic_θ(x,y)=geocentric_xy_to_geodesic_θ(NormalizedEarth,x
 # does not require an iterative method
 # tanθ_c= (1-e²)tanθ
 @inline function _surface_from_geocentric_θdeg_to_geodesic_θdeg(datum::Datum, θc::T) where {Datum, T}
+  θc==360 && return θc   # angle is the same at 0,90,180,270,360, but the code would return 0 for 360
   squared_eccentricity_earth = eccentricity²(ellipsoid(datum))
   y,x= sind(θc),cosd(θc)
-  return mod(atand(y, x*(1 - squared_eccentricity_earth)),360)
+  return atand(y, x*(1 - squared_eccentricity_earth)) |> x-> ifelse(x==360,x,mod(x,360))
 end
 
 # Function to convert geodesic angle to geocentric angle with quadrant information
 @inline function _surface_from_geodesic_θdeg_to_geocentric_θdeg(datum::Datum, θ::T) where {Datum, T}
+  θ==360 && return θ
   squared_eccentricity_earth = eccentricity²(ellipsoid(datum))
   y,x= sind(θ),cosd(θ)
   mod(atand(y*(1 - squared_eccentricity_earth), x),360)
@@ -352,3 +354,72 @@ _surface_from_geocentric_θdeg_to_geodesic_θdeg(θc::T) where T = _surface_from
 _surface_from_geocentric_θrad_to_geodesic_θrad(θc::T) where T = _surface_from_geocentric_θrad_to_geodesic_θrad(NormalizedEarth, θc)
 _surface_from_geodesic_θdeg_to_geocentric_θdeg(θ::T) where T = _surface_from_geodesic_θdeg_to_geocentric_θdeg(NormalizedEarth, θ)
 _surface_from_geodesic_θrad_to_geocentric_θrad(θ::T) where T = _surface_from_geodesic_θrad_to_geocentric_θrad(NormalizedEarth, θ)
+
+
+
+
+
+"""
+  convert_surface_angle_geocentric_to_geodesic_deg([::Datum=NormalizedEarth],θ::T)::T where where T<:IEEEFloat
+
+Convert a geocentric angle in degrees to the geodesic angle in degrees.
+"""
+convert_surface_angle_geocentric_to_geodesic_deg(datum::Datum,θ::T) where {Datum,T} = _surface_from_geocentric_θdeg_to_geodesic_θdeg(datum, θ)
+convert_surface_angle_geocentric_to_geodesic_deg(θ::T) where T = _surface_from_geocentric_θdeg_to_geodesic_θdeg(θ)
+"""
+  convert_surface_angle_geocentric_to_geodesic_rad([::Datum=NormalizedEarth],θ::T)::T where where T<:IEEEFloat
+
+Convert a geocentric angle in radians to the geodesic angle in radians.
+"""
+convert_surface_angle_geocentric_to_geodesic_rad(datum::Datum,θ::T) where {Datum,T} = _surface_from_geocentric_θrad_to_geodesic_θrad(datum, θ)
+convert_surface_angle_geocentric_to_geodesic_rad(θ::T) where T = _surface_from_geocentric_θrad_to_geodesic_θrad(θ)
+"""
+  convert_surface_angle_geodesic_to_geocentric_deg([::Datum=NormalizedEarth],θ::T)::T where where T<:IEEEFloat
+
+Convert a geodesic angle in degrees to the geocentric angle in degrees.
+"""
+convert_surface_angle_geodesic_to_geocentric_deg(datum::Datum,θ::T) where {Datum,T} = _surface_from_geodesic_θdeg_to_geocentric_θdeg(datum, θ)
+convert_surface_angle_geodesic_to_geocentric_deg(θ::T) where T = _surface_from_geodesic_θdeg_to_geocentric_θdeg(θ)
+"""
+  convert_surface_angle_geodesic_to_geocentric_rad([::Datum=NormalizedEarth],θ::T)::T where where T<:IEEEFloat
+
+Convert a geodesic angle in radians to the geocentric angle in radians.
+"""
+convert_surface_angle_geodesic_to_geocentric_rad(datum::Datum,θ::T) where {Datum,T} = _surface_from_geodesic_θrad_to_geocentric_θrad(datum, θ)
+convert_surface_angle_geodesic_to_geocentric_rad(θ::T) where T = _surface_from_geodesic_θrad_to_geocentric_θrad(θ)
+
+
+
+"""
+  convert_surface_angle_geocentric_to_geodesic_deg!([::Datum=NormalizedEarth],θ::A) where A<:AbstractArray{T} where T
+
+Convert an array of geocentric angle in degree to the geodesic angle in degrees in-place.
+"""
+convert_surface_angle_geocentric_to_geodesic_deg!(θ::A) where A<:AbstractArray{T} where T = map!(_surface_from_geocentric_θdeg_to_geodesic_θdeg, θ, θ)
+convert_surface_angle_geocentric_to_geodesic_deg!(datum::Datum,θ::A) where {Datum,A<:AbstractArray{T}} where T =
+  map!(x-> _surface_from_geocentric_θdeg_to_geodesic_θdeg(datum,x), θ, θ)
+
+"""
+  convert_surface_angle_geocentric_to_geodesic_rad!([::Datum=NormalizedEarth],θ::A) where A<:AbstractArray{T} where T
+
+Convert an array of geocentric angle in radians to the geodesic angle in radians in-place.
+"""
+convert_surface_angle_geocentric_to_geodesic_rad!(θ::A) where A<:AbstractArray{T} where T = map!(_surface_from_geocentric_θrad_to_geodesic_θrad, θ, θ)
+convert_surface_angle_geocentric_to_geodesic_rad!(datum::Datum,θ::A) where {Datum,A<:AbstractArray{T}} where T =
+  map!(x-> _surface_from_geocentric_θrad_to_geodesic_θrad(datum,x), θ, θ)
+"""
+  convert_surface_angle_geodesic_to_geocentric_deg!([::Datum=NormalizedEarth],θ::A) where A<:AbstractArray{T} where T
+
+Convert an array of geodesic angle in degrees to the geocentric angle in degrees in-place.
+"""
+convert_surface_angle_geodesic_to_geocentric_deg!(θ::A) where A<:AbstractArray{T} where T = map!(_surface_from_geodesic_θdeg_to_geocentric_θdeg, θ, θ)
+convert_surface_angle_geodesic_to_geocentric_deg!(datum::Datum,θ::A) where {Datum,A<:AbstractArray{T}} where T =
+  map!(x-> _surface_from_geodesic_θdeg_to_geocentric_θdeg(datum,x), θ, θ)
+
+"""
+  convert_surface_angle_geodesic_to_geocentric_rad!([::Datum=NormalizedEarth],θ::A) where A<:AbstractArray{T} where T
+Convert an array of geodesic angle in radians to the geocentric angle in radians in-place.
+"""
+convert_surface_angle_geodesic_to_geocentric_rad!(θ::A) where A<:AbstractArray{T} where T = map!(_surface_from_geodesic_θrad_to_geocentric_θrad, θ, θ)
+convert_surface_angle_geodesic_to_geocentric_rad!(datum::Datum,θ::A) where {Datum,A<:AbstractArray{T}} where T =
+  map!(x-> _surface_from_geodesic_θrad_to_geocentric_θrad(datum,x), θ, θ)

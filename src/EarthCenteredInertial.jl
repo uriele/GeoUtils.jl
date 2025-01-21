@@ -329,3 +329,117 @@ function Base.convert(::Type{LatLonAlt{Datum}},coords::EarthCenteredEarthFixed{D
   LatLonAlt{Datum}(Deg(ϕ′),Deg(λ),KM(h′))
 
 end
+
+
+
+struct ECEF2D{Datum,T<:IEEEFloat}
+  w::T
+  z::T
+end
+
+ECEF2D{Datum}(x::T,y::T) where {Datum,T<:IEEEFloat} =ECEF2D{Datum,T}(x,y)
+ECEF2D{Datum}(x::Number,y::Number) where Datum = ECEF2D{Datum,float{Number}}(promote(x,y)...)
+ECEF2D{Datum}(x::L1,y::L2) where {L1<:ULength,L2<:ULength,Datum} = ECEF2D{Datum}(ustrip(uconvert(km,x)),ustrip(uconvert(km,y)))
+ECEF2D{Datum}(x::L,y::Number) where {L<:ULength,Datum} = ECEF2D{Datum}(ustrip(uconvert(km,x)),y)
+ECEF2D{Datum}(x::Number,y::L) where {L<:ULength,Datum} = ECEF2D{Datum}(x,ustrip(uconvert(km,y)))
+
+ECEF2D(x,y) = ECEF2D{WGS84Latest}(x,y)
+
+
+Base.convert(::Type{ECEF2D{T,Datum}},coords::ECEF2D{Datum}) where {T,Datum} = ECEF2D{T,Datum}(coords.w,coords.z)
+CoordRefSystems.constructor(::Type{<:ECEF2D{Datum}}) where {Datum} = ECEF2D{Datum}
+==(coords₁::ECEF2D{Datum},coord₂::ECEF2D{Datum}) where {Datum}=
+coords₁.z==coord₂.z && coords₁.w==coord₂.w
+
+struct LLA2D{Datum,T<:IEEEFloat}
+  h::T
+  θ::T
+end
+
+
+LLA2D{Datum}(h::T,θ::T) where {Datum,T<:IEEEFloat} =LLA2D{Datum,T}(h,mod(θ,360))
+LLA2D{Datum}(h::Number,θ::Number) where Datum = LLA2D{Datum,float(Number)}(promote(h,mod(θ,360))...)
+LLA2D{Datum}(h::L,θ::Number) where {L<:ULength,Datum} = LLA2D{Datum}(ustrip(uconvert(km,h)),θ)
+LLA2D{Datum}(h::Number,θ::D) where {D<:Deg,Datum} = LLA2D{Datum}(h,ustrip(θ))
+LLA2D{Datum}(h::L,θ::D) where {L<:ULength,D<:Deg,Datum} = LLA2D{Datum}(ustrip(uconvert(km,h)),ustrip(θ))
+LLA2D{Datum}(h::Number,θ::R) where {R<:Rad,Datum} = LLA2D{Datum}(h,ustrip(uconvert(°,θ)))
+LLA2D{Datum}(h::L,θ::R) where {L<:ULength,R<:Rad,Datum} = LLA2D{Datum}(ustrip(uconvert(km,h)),ustrip(uconvert(°,θ)))
+
+LLA2D(h::T,θ::T) where T<:IEEEFloat = LLA2D{WGS84Latest,T}(h,θ)
+
+
+Base.convert(::Type{LLA2D{T,Datum}},coords::LLA2D{Datum}) where {T,Datum} = LLA2D{T,Datum}(coords.h,coords.θ)
+CoordRefSystems.constructor(::Type{<:LLA2D{Datum}}) where {Datum} = LLA2D{Datum}
+==(coords₁::LLA2D{Datum},coord₂::LLA2D{Datum}) where {Datum}=
+coords₁.h==coord₂.h && coords₁.θ==coord₂.θ
+
+CoordRefSystems.ellipsoid(datum::Datum) = ellipsoid(datum)
+
+
+function getNormalizedEarth()
+  NE=ellipsoid(NormalizedEarth)
+
+
+
+  return _NormalizedEarth🌎[]
+end
+
+
+function setNormalizedEarth(squared_eccentricity_earth::T) where T<:IEEEFloat
+  @assert(0<=(squared_eccentricity_earth)<=1, "The eccentricity squared must be between 0 and 1")
+  _NormalizedEarth🌎[]=ellipsfrome²(squared_eccentricity_earth)
+
+  getNormalizedEarth()
+  return nothing
+end
+setNormalizedEarth() = setNormalizedEarth(eccentricity²(CoordRefSystems.ellipsoid(WGS84Latest)))
+
+
+abstract type NormalizedEarth🌎 <: RevolutionEllipsoid end
+struct NormalizedEarth<:Datum end
+ellipsoidparams(::Type{NormalizedEarth🌎}) = _NormalizedEarth🌎[]
+ellipsoid(::Type{NormalizedEarth}) = NormalizedEarth🌎
+eccentricity(ellipsoid(NormalizedEarth))
+##############
+# CONVERSIONS
+##############
+
+function Base.convert(::Type{ECEF2D{Datum}},coords::LLA2D{Datum,T}) where {T,Datum}
+  🌎 = ellipsoid(Datum)
+  majoraxis_earth = majoraxis(🌎) |> ustrip
+  squared_eccentricity_earth= eccentricity²(🌎)
+  h=ustrip(coords.h)
+  θ=ustrip(coords.θ)
+  sinθ=sind(θ)
+  cosθ=cosd(θ)
+  N=majoraxis_earth/sqrt(1-squared_eccentricity_earth*sinθ*sinθ)
+  w=(N+h)*cosθ
+  z=(N*(1-squared_eccentricity_earth)+h)*sinθ
+  return ECEF2D{Datum}(w,z)
+end
+
+function Base.convert(::Type{LLA2D{Datum}},coords::ECEF2D{Datum,T}) where {T,Datum}
+  🌎 = ellipsoid(Datum)
+  majoraxis_earth = T(ustrip(majoraxis(🌎)))
+  minoraxis_earth = T(ustrip(minoraxis(🌎)))
+  squared_eccentricity_earth = T(eccentricity²(🌎))
+  z = ustrip(coords.z)
+  p = ustrip(coords.w)
+  e′² = squared_eccentricity_earth / (1 - squared_eccentricity_earth)
+  ψ = atand(majoraxis_earth * z, minoraxis_earth * p)
+  ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ψ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ψ)^3),360)
+  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
+  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
+
+  N = majoraxis_earth / sqrt(1 - squared_eccentricity_earth * sind(ϕ)^2)
+  ## Fix for the condition cosθ=0, in that case subtract the
+  cosθ=cosd(ϕ)
+  @debug "cosθ=$cosθ"
+  if abs(cosθ)>atol(T)
+    h = p/cosθ - N
+  else
+    h =abs(z)-minoraxis_earth
+  end
+
+  return LLA2D{Datum}(h,ϕ)
+end
