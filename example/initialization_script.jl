@@ -1,11 +1,24 @@
 
-using StructArrays
+using GeoUtils
+ using StructArrays
 using CoordRefSystems
 using StaticArrays
 using Base:IEEEFloat
 using LinearAlgebra: ⋅
 using Unitful: ustrip
-using Makie,WGLMakie
+#using Makie,WGLMakie
+const MODEL=Ref{AirModel}(Carlotti())
+setModel(model::AM=Carlotti()) where AM<:AirModel= MODEL[]=model
+setModel(::Type{AM}) where AM<:AirModel= MODEL[]=AM()
+getModel()=MODEL[]
+setModel()
+getModel()
+const INTERPOLATION=Ref{AbstractPressureInterpolation}(LinearPressure())
+setPressureInterpolation(interpolation::PI=LinearPressure()) where PI<:AbstractPressureInterpolation= INTERPOLATION[]=interpolation
+setPressureInterpolation(::Type{PI}) where PI<:AbstractPressureInterpolation= INTERPOLATION[]=PI()
+getPressureInterpolation()=INTERPOLATION[]
+setPressureInterpolation(LogarithmicPressure)
+setPressureInterpolation()
 
 
 function initialize_raytracing_plot(h_levels,θ_radii)
@@ -155,43 +168,43 @@ hᵢ="0.000000000000000E+000   3.60000000000000        3.80000000000000
 x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
 x-> [parse(Float64,y) for y in x]./majoraxis_earth;
 # Generate discretized atmosphere using the knots
-pressure,temperature,refractive=discretize_atmosphere(atmosphere,hᵢ,θᵢ; model=MODEL[],interpolation_pressure=INTERPOLATION[])
+pressure,temperature,refractive=discretize_atmosphere(atmosphere,hᵢ,θᵢ; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
 
 ############################################
 # get coordinates in LLA and ECEF
 #########################################
-idx270=findfirst(θᵢ.==90.0+180)
-θᵢ=SemiCircularVector(θ_knots) |> x->  x[idx270:end+idx270-1]
+idx270=findfirst(θᵢ.==90.0+180);
+θᵢ=SemiCircularVector(θᵢ) |> x->  x[idx270:end+idx270-1];
 
-θᵢ.+=90.0
-θᵢ.=mod.(θᵢ,360.0)
-pressure.=pressure[:,idx270:end+idx270-1]
-temperature.=temperature[:,idx270:end+idx270-1]
-refractive.=refractive[:,idx270:end+idx270-1]
+θᵢ.+=90.0;
+θᵢ.=mod.(θᵢ,360.0);
+pressure.=pressure[:,idx270:end+idx270-1];
+temperature.=temperature[:,idx270:end+idx270-1];
+refractive.=refractive[:,idx270:end+idx270-1];
 ##########################################
 # Used reversed in discretize_atmosphere
-sort!(hᵢ;rev=true)
+sort!(hᵢ;rev=true);
 ##########################################
 
 # I will not need it in the new code, only the angle and the height is required
 (
   scale_levels2,
   line_radii2
-)=getIntersectionObjects(NormalizedEarth(),hᵢ,θᵢ)
+)=getIntersectionObjects(NormalizedEarth(),hᵢ,θᵢ);
 # although I will need a new structure for the angles
 
-θᵢ_effective= GeoUtils._surface_from_geocentric_θdeg_to_geodesic_θdeg.(θᵢ)
+θᵢ_effective= GeoUtils._surface_from_geocentric_θdeg_to_geodesic_θdeg.(θᵢ);
 
 # create rays
 #@benchmark orbit=read_orbit("./data_atm/INP_FILES/orbit.dat")
-orbit1=GeoUtils.__read_orbit("./data_atm/INP_FILES/orbit.dat")
-normalize_orbit.(orbit1)
+#orbit1=GeoUtils.__read_orbit("./data_atm/INP_FILES/orbit.dat");
+#normalize_datum!(orbit1)
 #|> # read the orbit file
-orbit=read_orbit("./data_atm/INP_FILES/orbit.dat")
-     o-> normalize_orbit.(o);
-rays= create_rays.(orbit); # create the rays
+orbit=read_orbit("./data_atm/INP_FILES/orbit.dat");
+normalize_datum!(orbit);
 
-typeof(orbit1)
+using BenchmarkTools
+@benchmark rays= create_rays.(orbit) # create the rays
 
 ####### TO DO CHECK NEW STRUCTURE _Ray2 instead of Ray2D
 #
@@ -199,10 +212,22 @@ typeof(orbit1)
 #
 ###########################################################
 
-@benchmark rays1=GeoUtils.create_bundle_rays(Float64,orbit[:])
+@benchmark rays1=GeoUtils.create_bundle_rays(Float64,orbit)
 
+origin.(rays)==origin.(rays1)
+direction.(rays)≈ direction.(rays1)
+orb_test=deepcopy(orbit[1:3])
 
+_a=create_rays.(orb_test)
+_b=GeoUtils.create_bundle_rays(orb_test)
+_b
 
+_a[1]==_b[1]
+
+origin(_a[1])==origin(_b[1])
+direction(_a[1])- direction(_b[1])
+rays1[1]
+orbit
 @benchmark rays= create_rays.(orbit) # create the rays
 
 isa(orbit,AbstractArray)

@@ -404,7 +404,7 @@ satellite_angle(o::SatOrbit) = o.ang
 orbital_coordinate(o::SatOrbit) = o.orbital_coordinate
 islimb(o::SatOrbit) = o._islimb
 isnadir(o::SatOrbit) = !o._islimb
-
+isnormalized(o::SatOrbit) = o._normalized
 
 
 function __read_orbit(::Type{T},file::String) where T
@@ -457,13 +457,13 @@ read_orbit(file::String)=read_orbit(Float64,file)
 
 
 """
-  normalize_orbit!([datum=WGS84Latest],sorbit::StructArray{SatOrbit})
+  normalize_datum!([datum=WGS84Latest],sorbit::StructArray{SatOrbit})
 
 Normalize in-place the orbit with respect to the Earth's major axis.
 
 Note: sorbit is a StructArray of SatOrbit (SatOrbit is an immutable struct).
 """
-function normalize_orbit!(datum::Datum,orbit::Ao) where {Datum,Ao<:StructArray{O}} where O<:SatOrbit{T} where T
+function normalize_datum!(datum::Datum,orbit::Ao) where {Datum,Ao<:StructArray{O}} where O<:SatOrbit{T} where T
   majoraxis_earth= majoraxis(ellipsoid(datum)) |> ma-> uconvert(km,ma) |> ustrip
   for i in eachindex(orbit)
     orbit._normalized[i]==true && continue
@@ -474,22 +474,19 @@ function normalize_orbit!(datum::Datum,orbit::Ao) where {Datum,Ao<:StructArray{O
   end
   return nothing
 end
-normalize_orbit!(orbit::Ao)  where {Ao<:StructArray{O}} where O<:SatOrbit{T} where T = normalize_orbit!(WGS84Latest,orbit)
-
+normalize_datum!(orbit::Ao)  where {Ao<:StructArray{O}} where O<:SatOrbit{T} where T = normalize_datum!(WGS84Latest,orbit)
 
 """
-  normalize_orbit([datum=WGS84Latest],orbit::SatOrbit)
+  normalize_datum([datum=WGS84Latest],orbit::SatOrbit{T})::SatOrbit{T} where T
 
-Normalize the orbit with respect to the Earth's major axis.
+Normalize the orbit with respect to the Earth's major axis and return a new orbit.
 """
-
-function normalize_orbit(datum::Datum,orbit::O) where {Datum,O<:SatOrbit{T}} where T
-
+function normalize_datum(datum::Datum,orbit::O)::O where {Datum,O<:SatOrbit{T}} where T
   orbit._normalized==true && return orbit
   majoraxis_earth= majoraxis(ellipsoid(datum)) |> ma-> uconvert(km,ma) |> ustrip
   w_orbit= orbit.w/majoraxis_earth
   z_orbit= orbit.z/majoraxis_earth
   h_orbit= orbit.h/majoraxis_earth
-  return SatOrbit{T}(z_orbit,w_orbit,orbit.ang,h_orbit,orbit.orbital_coordinate,true)
+  return O(z_orbit,w_orbit,orbit.ang,h_orbit,orbit.orbital_coordinate,true)
 end
-normalize_orbit(orbit::O) where O<:SatOrbit{T} where T = normalize_orbit(WGS84Latest,orbit)
+normalize_datum(orbit::O) where O<:SatOrbit{T} where T = normalize_datum(WGS84Latest,orbit)

@@ -1,7 +1,7 @@
 
 const ATOL64 = ScopedValue(1.0e-10)
 const ATOL32 = ScopedValue(1.0f-5)
-
+abstract type AbstractRay{T<:IEEEFloat} end
 """
     atol(T)
     atol(x::T)
@@ -19,9 +19,9 @@ atol(::Type{Float64}) = ATOL64[]
 atol(::Type{Float32}) = ATOL32[]
 
 
-const Vec3{T} = MVector{3,T}
+const Vec3{T} = SVector{3,T}
 
-const Vec2{T} = MVector{2,T}
+const Vec2{T} = SVector{2,T}
 
 const Vec2(x::T,y::T=T(0)) where T<:Number=Vec2{T}(x,y)
 const Vec3(x::T,y::T=T(0),z::T=T(0)) where T<:Number=Vec3{T}(x,y,z)
@@ -37,27 +37,74 @@ const Vec2F32 = Vec2{Float32}
 SDiagonal(v::Vec2{T}) where T = Diagonal(v)
 SDiagonal(v::Vec3{T}) where T = Diagonal(v)
 
-struct Ray2D{T<:IEEEFloat}
+struct Ray2D{T}<: AbstractRay{T}
   origin::Vec2{T}
   direction::Vec2{T}
-
-  @inline function Ray2D(origin::Vec2{T},direction::Vec2{T}) where T
+  _normalized::Bool
+  @inline function Ray2D{T}(origin::Vec2{T},direction::Vec2{T},_normalized=false) where T
     _hypothenuse(direction)==0 && throw(ArgumentError("Direction cannot be zero"))
-    return new{T}(origin,_normalize(direction))
+    return new{T}(origin,_normalize_direction(direction),_normalized)
   end
 end
 
-Ray2D(x::T,y::T,dx::T,dy::T) where T<:IEEEFloat = Ray2D(Vec2(x,y),Vec2(dx,dy))
 
+Ray2D(origin::Vec2{T},direction::Vec2{T}) where T<:IEEEFloat = Ray2D{T}(origin,direction)
+Ray2D(x::T,y::T,dx::T,dy::T) where T<:IEEEFloat = Ray2D(Vec2(x,y),Vec2(dx,dy))
 Ray2D(x::R1,y::R2,dx::R3,dy::R4) where {R1<:Real,R2<:Real,R3<:Real,R4<:Real} = Ray2D(promote(x,y,dx,dy)...)
 Ray2D(x::I,y::I,dx::I,dy::I) where I<:Int = Ray2D(float(x),y,dx,dy)
 Ray2D(T::Type=Float64)=Ray2D(T.(0.0),T.(0.0),T.(1.0),T.(1.0))
 
+NormalizedRay2D(origin::Vec2{T},direction::Vec2{T}) where T<:IEEEFloat = Ray2D{T}(origin,direction,true)
+NormalizedRay2D(x::T,y::T,dx::T,dy::T) where T<:IEEEFloat = NormalizedRay2D(Vec2(x,y),Vec2(dx,dy))
+NormalizedRay2D(x::R1,y::R2,dx::R3,dy::R4) where {R1<:Real,R2<:Real,R3<:Real,R4<:Real} = NormalizedRay2D(promote(x,y,dx,dy)...)
+NormalizedRay2D(x::I,y::I,dx::I,dy::I) where I<:Int = NormalizedRay2D(float(x),y,dx,dy)
+
+
+# Interfaces for Ray implementation
+origin(r::AbstractRay)=r.origin
+direction(r::AbstractRay)=r.direction
+isnormalized(r::AbstractRay)=r._normalized
+(r::AbstractRay)(t::R) where R<:Real =r.origin+t.*r.direction
+
+"""
+  normalize_datum!([datum=WGS84Latest],sorbit::StructArray{R}) where R<:AbstractRays
+
+Normalize in-place the Ray with respect to the Earth's major axis.
+
+Note: sorbit is a StructArray of SatOrbit (SatOrbit is an immutable struct).
+"""
+function normalize_datum!(datum::Datum,ray::Ar) where {Datum,Ar<:StructArray{R}} where R<:AbstractRay{T} where T
+  majoraxis_earth= majoraxis(ellipsoid(datum)) |> ma-> uconvert(km,ma) |> ustrip
+  for i in eachindex(ray)
+    ray._normalized[i]==true && continue
+    #Staticvector changes debug
+    ray.origin[i]=ray.origin[i]./majoraxis_earth
+    ray._normalized[i]=true
+  end
+  return nothing
+end
+normalize_datum!(ray::Ar)  where {Ar<:StructArray{R}} where R<:AbstractRay{T} where T = normalize_datum!(WGS84Latest,ray)
+
+
+"""
+  normalize_datum([datum=WGS84Latest],ray::R)::R where R<:AbstractRay
+
+Normalize the Ray with respect to the Earth's major axis and return a new Ray.
+"""
+function normalize_datum(datum::Datum,ray::R)::R where {Datum,R<:AbstractRay{T}} where T
+  ray._normalized==true && return ray
+  majoraxis_earth= majoraxis(ellipsoid(datum)) |> ma-> uconvert(km,ma) |> ustrip
+  _origin=ray.origin/majoraxis_earth
+  return R(_origin,ray.direction,true)
+end
+normalize_datum(ray::R) where R<:AbstractRay{T} where T = normalize_datum(WGS84Latest,ray)
+
+
 function (lm::LinearMap)(r::Ray2D{T}) where T
-  return Ray2D(Vec2(lm(r.origin)...),_normalize(Vec2(lm(r.direction)...)))
+  return Ray2D(Vec2(lm(r.origin)...),_normalize_direction(Vec2(lm(r.direction)...)))
 end
 
-(r::Ray2D{T})(t) where T = r.origin+T(t)*_normalize(r.direction)
+(r::Ray2D{T})(t::R) where {R<:Real,T<:IEEEFloat} = r.origin+T(t)*r.direction
 
 struct Ellipsoid{T<:IEEEFloat}
   # The map is assumed to be centered at the origin so I do not need to store the center
@@ -95,7 +142,7 @@ get_origin(r::Ray2D)=r.origin
 
 @inline _fastquadratic(halfB::T,C::T) where T = sqrt_llvm(halfB*halfB-C)
 @inline _hypothenuse(v::Vec2{T}) where T = hypot(v.x,v.y)
-@inline _normalize(v::Vec2{T}) where T = v/_hypothenuse(v)
+@inline _normalize_direction(v::Vec2{T}) where T = v/_hypothenuse(v)
 
 
 """
@@ -184,7 +231,7 @@ end
  # x -> (halfB*ones(2)+[x,-x]) |>
  # x -> reduce(min,filter(x->x>=0,x);init=Inf)  # filter takes advantage of the fact that NaN return false for >0 <0 or ==0
 
-distance_from_unit_circle(ray::Ray2D{T}) where T = distance_from_unit_circle(ray.origin,_normalize(ray.direction))
+distance_from_unit_circle(ray::Ray2D{T}) where T = distance_from_unit_circle(ray.origin,_normalize_direction(ray.direction))
 
 
 """
@@ -426,69 +473,49 @@ end
 # Create Rays from the orbit
 
 """
-    create_rays(datum::Datum,orb::SatOrbit)::Ray2D{T}
-    create_rays(orb::SatOrbit)::Ray2D{T}
+    create_rays(orbit::SatOrbit)::Ray2D{T}
 
 Create a ray from the datum and the orbit. If the datum is not provided, it will use the NormalizedEarth datum
 """
-function create_rays(orb::SatOrbit)
-  (w,z)=(orb.w,orb.z)
+function create_rays(orbit::SatOrbit{T}) where T
+  (w,z)=(orbit.w,orbit.z)
   # LIMB ANGLE WITH RESPECT TO CENTER TO THE EARTH
-   θ = atan(z/w)
+  # θ = atan(z/w)
   (tx,ty)=(z,-w)|> x-> x./hypot(x...) .*INWARD_NORMAL
   #################################
 
-  angle= orb.ang*INWARD_NORMAL
+  angle= orbit.ang*INWARD_NORMAL
 
   @inline _rotation_matrix(θ)= SMatrix{2,2}([cosd(θ) sind(θ);-sind(θ) cosd(θ)] )
-  return Ray2D(Vec2(w,z),_rotation_matrix(angle)*Vec2(tx,ty))
+
+  return Ray2D{T}(Vec2(w,z),_rotation_matrix(angle)*Vec2(tx,ty),orbit._normalized)
 end
-
-
-
-#### IMPORTANT
-# Temp Structure used to compare the rays
-###########################################
-struct _Ray2{T<:IEEEFloat}
-  x::T
-  y::T
-  dx::T
-  dy::T
-
-  @inline function _Ray2{T}(x,y,dx,dy) where T
-    norm=hypot(dx,dy)
-    return new{T}(x,y,dx,dy)
-  end
-end
-
-_Ray2(x::T,y::T,dx::T,dy::T) where T<:IEEEFloat = _Ray2{T}(x,y,dx,dy)
-_Ray2(x::Real,y::Real,dx::Real,dy::Real) = _Ray2(promote(x,y,dx,dy)...)
-_Ray2(x::I,y::I,dx::I,dy::I) where I<:Int = _Ray2(float(x),y,dx,dy)
-_Ray2(T::Type=Float64)=_Ray2(T(0.0),T(0.0),T(1.0),T(1.0))
 
 ###################################################################################
 
-function create_bundle_rays(::Type{T},allorbits::Ao) where {T<:IEEEFloat,Ao<:AbstractArray{O}} where {O<:SatOrbit}
+function create_bundle_rays(::Type{T},orbit::Ao) where {T<:IEEEFloat,Ao<:AbstractArray{O}} where {O<:SatOrbit}
   # Preallocation
-  Rays=StructArray(fill(_Ray2(T),size(allorbits)))
+  #Rays=StructArray(fill(Ray2D(ones(T,4)...),size(orbit)))
+  Rays=StructArray{Ray2D{T}}(undef,size(orbit))
 
-  for i in eachindex(Rays)
-
-    ## Make it it's own inline function but with in-place
-    w=allorbits[i].w
-    z=allorbits[i].z
+  for i in eachindex(orbit)
     # use accessor to write static arrays
-    Rays.x[i]=w
-    Rays.y[i]=z
-    θ = allorbits[i].ang*INWARD_NORMAL
-    tangent_magnitude=hypot(z,w)
-    cosθ=cos(θ)
-    sinθ=sin(θ)
-    tx=z/tangent_magnitude .*INWARD_NORMAL
-    ty=-w/tangent_magnitude .*INWARD_NORMAL
-    Rays.dx[i]=cosθ*tx+sinθ*ty
-    Rays.dy[i]=-sinθ*tx+cosθ*ty
+    #θ = atan(orbit.z,orbit.w)
+    tangent_magnitude=hypot(orbit.z[i],orbit.w[i])
+    angle= orbit.ang[i]*INWARD_NORMAL
+    cosθ=cosd(angle)
+    sinθ=sind(angle)
+    tx=   orbit.z[i]/tangent_magnitude .*INWARD_NORMAL
+    ty=  -orbit.w[i]/tangent_magnitude .*INWARD_NORMAL
+    dirx=cosθ*tx+sinθ*ty
+    diry=-sinθ*tx+cosθ*ty
+    Rays.origin[i]=Vec2(orbit.w[i],orbit.z[i])
+    Rays.direction[i]=Vec2(dirx,diry)
+    Rays._normalized[i]=orbit._normalized[i]
+    #Staticvector changes debug
+    #Rays[i]=Ray2D{T}(Vec2(orbit.w[i],orbit.z[i]),Vec2(dirx,diry),orbit._normalized[i])
     ########################################
+
   end
   return Rays
 end

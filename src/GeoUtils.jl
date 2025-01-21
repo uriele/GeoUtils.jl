@@ -73,7 +73,8 @@ module GeoUtils
   export Ciddor
   export refractive_index
   export Vec2,Vec3
-  export Ray2D,Ellipsoid
+  export Ray2D,NormalizedRay2D
+  export Ellipsoid
   export distance_from_unit_circle,distance_from_segment
   export distance_from_radii
   export h20_ppmv_to_rh
@@ -86,12 +87,13 @@ module GeoUtils
   export NormalizedEarth,ellipsfrome²
   export setNormalizedEarth,getNormalizedEarth
   export LocalAtmosphere2D,LocalAtmosphereECEF2D,LocalAtmosphereLLA2D
-  export SatOrbit,normalize_orbit,normalize_orbit!
+  export SatOrbit,normalize_datum,normalize_datum!
   export IntersectionStyle,NoIntersection,IsIntersection
   export LevelIntersection,RadiusIntersection,RadiusLevelIntersection,LevelRadiusIntersection
   export advance,bend,Interface
   export create_rays
   export Radius,get_direction,get_origin
+  export origin,direction,isnormalized,islimb,isnadir
   export getIntersectionObjects
 
   export LeftIntersection,RightIntersection
