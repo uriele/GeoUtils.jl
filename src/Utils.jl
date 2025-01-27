@@ -293,7 +293,7 @@ function geocentric_xy_to_geodesic_θ(datum::Datum,x::T,y::T)::Tuple{T,T} where 
   end
 
   @inline function _θ(θ,x,z)
-    R=_NN(θ)
+    R=_NN(θ,squared_eccentricity_earth)
 
     h=_hh(x,z,θ)
 

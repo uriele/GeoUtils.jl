@@ -2,8 +2,7 @@
 # to be used and tested before the next release
 
 using LinearAlgebra
-_origin= [1.0, 1.0] #initial point
-minoraxis = 0.5 #minor axis of the ellipse <1
+minoraxis_earth = 0.5 #minor axis of the ellipse <1
 const TOLF32=1e-7
 const TOLF64=1e-14
 @inline atol(::Type{T}) where T<:Float32 =TOLF32
@@ -56,36 +55,21 @@ function fg!(g::V1,
   Denom+= (Denom<atol(T))*atol(T)
 
 
-  g[1]= ∇²f_22*g1-∇²f_12*g2
-  g[2]=-∇²f_12*g1+∇²f_11*g2
-  g./=Denom
+  g[1]=( ∇²f_22*g1-∇²f_12*g2)./Denom
+  g[2]=(-∇²f_12*g1+∇²f_11*g2)./Denom
 
-#  @info "g: g"
-
-
-  #@info "distance: $(distance), h²: $(h²+(distance²>atol(T))*distance²), f: $(distance²+AB²)"
-  #@info "g: $(g)"
   return distance²+AB²,h²+(distance²>atol(T))*distance²
 
 end
 
 
-NNN=10
 
-direc=zeros(2,NNN)
-rand(2,NNN)|> x-> [direc[1:2,i].=-x/hypot(x...) for (i,x) in enumerate(eachcol(x))]
-
-x=zeros(2,NNN)
-x[1:2,:].=[0.1,pi/3]
-g=zeros(2,NNN)
-T=Float64
-using BenchmarkTools
-
-  function myoptimize!(g,x,origin,direc,minoraxis,h2)
+function myoptimize!(g,x,origin,direc,minoraxis,h2)
     _old=0.0
+    _h2=999.0
     while true
       _fun,_h2=fg!(g,x[1],x[2],origin,direc,minoraxis,h2)
-      x.-=0.1.*g
+      x.-=0.5.*g
       #@info "x: $x"
       err=abs(_fun-_old)
       _old=_fun
@@ -95,7 +79,11 @@ using BenchmarkTools
         break
       end
     end
-  end
+    return _h2
+end
+
+
+
 
 
 #=
@@ -235,7 +223,7 @@ D=((2(AB_A + Tₑ²) + ((4//1)*AB_A + (4//1)*Tₑ²)*AB²_minus_h² + (8//1)*(AB
 ∇²f- ( _c1*AB²_minus_h² + _c0 ) |> ∂f -> expand.(∂f) |> ∂f -> simplify.(∂f)
 
 =#
-
+#=
 nu=10000
 NUM=nu
 #for NUM in nu
@@ -277,34 +265,8 @@ using BenchmarkTools
   end
   )
 end
-
-
-direc=zeros(2,NUM)
-rand(2,NUM)|> x-> [direc[1:2,i].=-x/hypot(x...) for (i,x) in enumerate(eachcol(x))]
-#direc.= -[1,1]/sqrt(2)
-x=zeros(2,NUM)
-x[1:2,:].=[0.1,pi/3]
-g=zeros(2,NUM)
-
-@info "eachcol $NUM serial"
-x1=copy(x)
-x2=copy(x)
-x3=copy(x)
-g1=copy(g)
-g2=copy(g)
-g3=copy(g)
-for i in axes(x,2) # zip(eachslice(x,dims=2),eachslice(g,dims=2),eachslice(direc,dims=2))
-  @inbounds @fastmath myoptimize!(view(g1,1:2,i),view(x1,1:2,i),view(_origin,1:2),view(direc,1:2,i),minoraxis,h2)
-end
-
-Threads.@threads for i in axes(x,2) # zip(eachslice(x,dims=2),eachslice(g,dims=2),eachslice(direc,dims=2))
-  @inbounds @fastmath myoptimize!(view(g2,1:2,i),view(x2,1:2,i),view(_origin,1:2),view(direc,1:2,i),minoraxis,h2)
-end
-
-@batch for i in axes(x,2) # zip(eachslice(x,dims=2),eachslice(g,dims=2),eachslice(direc,dims=2))
-  @inbounds @fastmath myoptimize!(view(g3,1:2,i),view(x3,1:2,i),view(_origin,1:2),view(direc,1:2,i),minoraxis,h2)
-end
-
+=#
+#=
 df[!,:speedup_serial].= df[!,:time_old_serial]./df[!,:time_new_serial]
 df[!,:speedup_threads].= df[!,:time_old_threads]./df[!,:time_new_threads]
 df[!,:speedup_batch].= df[!,:time_old_batch]./df[!,:time_new_batch]
@@ -329,25 +291,67 @@ df[!,[:speedup_serial,:speedup_threads,:speedup_batch]]
 df[!,[:gcspeedup_serial,:gcspeedup_threads,:gcspeedup_batch]]
 df[!,[:reduced_alloc_serial,:reduced_alloc_threads,:reduced_alloc_batch]]
 df[!,[:reduced_memory_serial,:reduced_memory_threads,:reduced_memory_batch]]
+=#
+
+using WGLMakie,Makie
 
 
 
-
-x1≈x2
-x1≈x3
-
-using Makie,WGLMakie
 fig=Figure()
 ax=Axis(fig[1,1])
-xlims!(ax,-1,1)
-ylims!(ax,-1,1)
-NN(t)=1/sqrt(cosd(t)^2+minoraxis^2*sind(t)^2)
-lines!(ax, [Point2((NN(a)+h)*cosd(a),(minoraxis^2*NN(a)+h)*sind(a)) for a in LinRange(0,361,36001)], color = :blue)
-lines!(ax, [Point2((NN(a))*cosd(a),(minoraxis^2*NN(a))*sind(a)) for a in LinRange(0,361,36001)], color = :blue)
-[(
-  scatter!(ax, Point2(origin[1,i]+x[1,i]*direc[1,i],origin[2,i]+x[1,i]*direc[2,i]), color = :blue),
-  scatter!(ax, Point2(cos(x[2,i]),minoraxis*sin(x[2,i])), color = :blue))
-for i in axes(x,2)]
-x
-i=1
-@code_warntype myoptimize!(view(g,1:2,i),view(x,1:2,i),view(_origin,1:2),view(direc,1:2,i),minoraxis,h2)
+lines!(ax,[Point(cos(t),minoraxis_earth*sin(t)) for t in LinRange(0,2π,1000)],color=:blue)
+_NN(t)=1/sqrt(cos(t)^2+sin(t)^2*minoraxis_earth^2)
+
+h=sqrt(h2)
+lines!(ax,[Point((_NN(t)+h).*cos(t),(minoraxis_earth^2*_NN(t)+h)*sin(t)) for t in LinRange(0,2π,1000)],color=:blue)
+
+for i in 1:10:1000 #axes(x,2)
+  lines!(ax,[Point(_origin[1,i]+_direc[1,i]*t,
+  _origin[2,i]+_direc[2,i]*t) for t in [0,4*x[1,i]]],color=:red);
+  scatter!(ax,[Point(_origin[1,i]+_direc[1,i]*x[1,i],
+  _origin[2,i]+_direc[2,i]*x[1,i]),
+  Point(cos(x[2,i]),minoraxis_earth*sin(x[2,i]))])
+
+
+end
+fig
+
+T=Float64
+N=100*10*100
+_origin=Array{T,2}(undef,2,100*10)
+_direc =Array{T,2}(undef,2,100*10)
+tpos=LinRange(0,2π,100)
+x=Array{T,2}(undef,2,100*10)
+count=0
+for i in 1:100
+  for j in 1:10
+    count+=1
+    _origin[1,count]=1.2*cos(tpos[i])
+    _origin[2,count]=1.2*sin(tpos[i])
+    tx=-_origin[2,count]
+    ty=_origin[1,count]
+    dx=tx*cosd(j/10-27)+ty*sind(j/10-27)
+    dy=-tx*sind(j/10-27)+ty*cosd(j/10-27)
+    magn=1/hypot(dx,dy)
+    _direc[1,count]=dx*magn
+    _direc[2,count]=dy*magn
+    x[1,count]=0.0
+    x[2,count]=tpos[i]
+  end
+end
+hh=Array{Float64,1}(undef,100*10)
+g1=similar(x)
+using BenchmarkTools
+@benchmark for i in axes($x,2) # zip(eachslice(x,dims=2),eachslice(g,dims=2),eachslice(direc,dims=2))
+  @inbounds @fastmath $hh[i]=myoptimize!(view($g1,:,i),
+    view($x,:,i),
+    view($_origin,:,i),
+    view($_direc,:,i),$minoraxis_earth,$h2)
+end
+-
+
+
+
+hum=LinRange(0,0.9,1000)
+
+lines(hum,[refractive_index(;humidity=h,wavelength=10.0,CO2ppm=0.0) for h in hum],color=:blue)

@@ -1,6 +1,6 @@
 include("initialization_script.jl")
 
-
+#=
 pressure_linear,temperature_,refractive_linear_carlotti,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Carlotti(),interpolation_pressure=INTERPOLATION[]);
 _,_,refractive_linear_ciddor,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Ciddor(),interpolation_pressure=INTERPOLATION[]);
 _,_,refractive_linear_mathar,_,_=discretize_atmosphere(atmosphere,h_knots,θ_knots; model=Mathar4(),interpolation_pressure=INTERPOLATION[]);
@@ -60,7 +60,7 @@ xlims!(ax3,0,68)
 h3=heatmap!(ax3,h_knots.*majoraxis_earth.*km,θ_knots,10^-2.0.*sqrt.((pressure_log.-pressure_linear).^2))
 Colorbar(figure[3:4,1:2][1,2],h3)
 save("$(pwd())/output_pressure.png",figure)
-
+=#
 
 # generate output vectors
 T=Float64
@@ -69,7 +69,7 @@ T=Float64
 rays=rays[:]
 rays1=similar(rays[:])
 # position of the tangent point only updated if there is an intersection
-tangent_quote=fill(T(Inf),length(rays1))
+tangent_quote=fill(T(Inf),length(rays1));
 register=Vector{Register}(undef,length(rays1)) # index of the current position of the ray
 # index of the current position of the ray
 wedge_index=fill((1,1),length(rays1))
@@ -78,7 +78,7 @@ wedge_index=fill((1,1),length(rays1))
 n₀=1.0
 
 
-refractive=refractive_linear_carlotti
+#refractive=refractive_linear_carlotti
 
 altitudes=Vector{Matrix{T}}(undef,6)
 
@@ -151,34 +151,62 @@ new_intersection(ray, # ray
   register=register,kwargs...
 )
 
-for (iii,refr) in enumerate([refractive_linear_carlotti,refractive_linear_ciddor,refractive_linear_mathar,
-            refractive_log_carlotti,refractive_log_ciddor,refractive_log_mathar])
+#for (iii,refr) in enumerate([refractive_linear_carlotti,refractive_linear_ciddor,refractive_linear_mathar,
+#            refractive_log_carlotti,refractive_log_ciddor,refractive_log_mathar])
 
-  refractive=refr
-  _find_first_intersection_ellipse(ray,n₀;kwargs...)=find_first_intersection_ellipse(ray,n₀;refractive_index_map=refractive,kwargs...)
+#  refractive=refr
+rays1=deepcopy(rays)
+_find_first_intersection_ellipse(ray,n₀)=find_first_intersection_ellipse(ray::Ray2D, # ray
+  n₀;  #refractive index ray
+  refractive_index_map=refractive, # map of refractive index
+  h_levels=hᵢ , # levels for i
+  θ_radii=θᵢ, # radii angles for j
+  scale_levels=scale_levels2) # scaling mapping to unit circle
 
+  hᵢ
 
-  begin
-    [
-      begin
-        #@info i
-        rays1[i],flag,tangent_quote[i],wedge_index[i],_=
-        _find_first_intersection_ellipse(ray,n₀)
-        register[i]= Register(flag,rays1[i](0)...)
-      end
-      for (i,ray) in enumerate(rays)
-    ];
+  tt=zeros(T,length(rays1))
 
-    rays=reshape(rays,800,19)
-    index=deepcopy(wedge_index)
-
-
-
-    hmax=maximum(h_levels)  #initialize the maximum height
+   @inbounds for i in eachindex(rays1)
+        rays1[i],flag,tangent_quote[i],wedge_index[i],tt[i]=_find_first_intersection_ellipse(rays1[i],1.0)
+              register[i]= Register(flag,rays1[i](0)...)
+    end
 
 
+rays2=deepcopy(rays[:])
+θᵢ_effective
 
-    NOPLOT=true
+
+Dray=rays1.origin-rays2.origin
+hypray=[hypot(dray...) for dray in Dray]
+extrema(hypray)
+ix=findfirst(hypray.==maximum(hypray))
+index=zeros(Int,2,length(rays2))
+x0=zeros(Float64,2,length(rays2))
+
+using Makie,WGLMakie
+minoraxis_earth=minoraxis(ellipsoid(NormalizedEarth))
+figure=Figure()
+
+ax=Axis(figure[1,1][1,1],xlabel="x",ylabel="y")
+scatter!(ax,rays.origin[ix])
+scatter!(ax,rays1.origin[ix],color=:red)
+scatter!(ax,rays2.origin[ix],color=:blue)
+lines!(ax,[Point2f(r) for r in [rays.origin[ix],rays1.origin[ix]]])
+lines!(ax,[Point2f(r) for r in [rays.origin[ix],rays2.origin[ix]]])
+_NN(t,b)=1/sqrt(cosd(t)^2+b^2*sind(t)^2)
+hmax=maximum(hᵢ)
+lines!(ax,[Point2f((_NN(t,minoraxis_earth)+hmax)cosd(t),(minoraxis_earth^2*_NN(t,minoraxis_earth)+hmax)*sind(t)) for t in LinRange(0,360,1000)],color=:black)
+
+
+find_input_interception_new_lagrangian2!(index,x0,rays2,n₀,refractive,hᵢ,θᵢ_effective)
+_totest(rays1,register,tangent_quote,wedge_index,n₀)
+@benchmark find_input_interception_new_lagrangian!($index,$x0,$rays2, # ray
+  n₀;  #refractive index ray
+  refractive_index_map=$refractive, # map of refractive index
+  h_levels=$hᵢ, # levels for i
+  θ_radii=$θᵢ_effective)
+
     if !NOPLOT
       fig,ax,ax2a,ax2b=initialize_raytracing_plot(h_levels,θ_radii)
       fig

@@ -1,6 +1,6 @@
 
 using GeoUtils
- using StructArrays
+using StructArrays
 using CoordRefSystems
 using StaticArrays
 using Base:IEEEFloat
@@ -126,7 +126,10 @@ atmosphere=read_local_atmosphere("./data_atm/INP_FILES");
 x-> split(x," ") |> x-> filter(y-> y≠"",x) |>
 x-> [parse(Float64,y) for y in x]; #.+90.0
 
+
+
 # normalizetion factor for h_knots
+
 majoraxis_earth=majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(km,x) |> ustrip;
 
 squared_eccentricity_earth=eccentricity²(ellipsoid(NormalizedEarth));
@@ -193,8 +196,8 @@ sort!(hᵢ;rev=true);
 )=getIntersectionObjects(NormalizedEarth(),hᵢ,θᵢ);
 # although I will need a new structure for the angles
 
-θᵢ_effective= GeoUtils._surface_from_geocentric_θdeg_to_geodesic_θdeg.(θᵢ);
-
+θᵢ_effective= GeoUtils._surface_from_geodesic_θrad_to_geocentric_θrad.(deg2rad.(θᵢ));
+θᵢ_effective
 # create rays
 #@benchmark orbit=read_orbit("./data_atm/INP_FILES/orbit.dat")
 #orbit1=GeoUtils.__read_orbit("./data_atm/INP_FILES/orbit.dat");
@@ -204,7 +207,7 @@ orbit=read_orbit("./data_atm/INP_FILES/orbit.dat");
 normalize_datum!(orbit);
 
 using BenchmarkTools
-@benchmark rays= create_rays.(orbit) # create the rays
+#rays= create_rays.(orbit) # create the rays
 
 ####### TO DO CHECK NEW STRUCTURE _Ray2 instead of Ray2D
 #
@@ -212,26 +215,104 @@ using BenchmarkTools
 #
 ###########################################################
 
-@benchmark rays1=GeoUtils.create_bundle_rays(Float64,orbit)
+rays=GeoUtils.create_bundle_rays(Float64,orbit)
 
-origin.(rays)==origin.(rays1)
-direction.(rays)≈ direction.(rays1)
-orb_test=deepcopy(orbit[1:3])
 
-_a=create_rays.(orb_test)
-_b=GeoUtils.create_bundle_rays(orb_test)
-_b
 
-_a[1]==_b[1]
 
-origin(_a[1])==origin(_b[1])
-direction(_a[1])- direction(_b[1])
-rays1[1]
-orbit
-@benchmark rays= create_rays.(orbit) # create the rays
+# Find intersection with outmost level
+function find_input_interception_new_lagrangian2!(index,x,rays::Ar, # ray
+  n₀,refractive,h_levels,θ_radii) where Ar<:AbstractArray{Ray2D{T}} where T
+  h_levels_max=maximum(h_levels)
+  @info "h_levels_max=$h_levels_max"
+  h_levels_max²=h_levels_max*h_levels_max
+  @info "h_levels_max²=$h_levels_max²"
+  ii=findfirst(h_levels.==h_levels_max)
+  minoraxis_earth=minoraxis(ellipsoid(NormalizedEarth))
+  invb2=1/(minoraxis_earth*minoraxis_earth)
+  θ_max=maximum(θ_radii)
 
-isa(orbit,AbstractArray)
-eltype(orbit)
+   @inbounds for i in eachindex(rays)
+
+    h²=GeoUtils.optimize_distance_h²_from_surface_lagrangian!(view(x,:,i),
+      rays.origin[i],rays.direction[i],minoraxis_earth,h_levels_max²,
+      T(0),T(2pi))
+
+    rays.origin[i]=rays[i](x[1,i])
+    x[2,i]=mod(x[2,i],2pi)
+    jj=ifelse(x[2,1]>θ_max,length(θ_radii), findlast(θ_radii.<= x[2,i]))
+
+
+    index[1,i]=ii
+    index[2,i]=jj
+    n₁=refractive[ii,jj]
+
+    ############
+    n₀₁=n₀/n₁
+    n₀₁²=n₀₁*n₀₁
+    ############
+    _hypot=hypot(rays[i].origin[1],rays[i].origin[2]*invb2)
+    Normal=Vec2(rays[i].origin[1]/_hypot,rays[i].origin[2]*invb2/_hypot)
+    cosθₙ=-Normal⋅rays.direction[i]
+    sinθₙ² =n₀₁²*(1-cosθₙ*cosθₙ)
+    if sinθₙ²≤1
+      rays.direction[i]=n₀₁*rays.direction[i]+(n₀₁*cosθₙ-sqrt(1-sinθₙ²))*Normal
+    else
+      rays.direction[i]=rays.direction[i]-2*cosθₙ*Normal
+    end
+  end
+end
+
+
+
+
+
+
+# Find intersection with outmost level
+function find_input_interception_new_lagrangian!(index,x,rays::Ar, # ray
+  n₀;  #refractive index ray
+  refractive_index_map=refractive, # map of refractive index
+  h_levels=h_levels, # levels for i
+  θ_radii=θ_radii) where Ar<:AbstractArray{Ray2D{T}} where T
+  h_levels_max=maximum(h_levels)
+  h_levels_max²=h_levels_max*h_levels_max
+  ii=findfirst(h_levels.==h_levels_max)
+  minoraxis_earth=minoraxis(ellipsoid(NormalizedEarth))
+  θ_max=maximum(θ_radii)
+
+  Normal=[0.0,0.0]
+  for i in eachindex(rays)
+
+    h²=GeoUtils.optimize_distance_h²_from_surface_lagrangian!(view(x,:,i),
+      rays.origin[i],rays.direction[i],minoraxis_earth,h_levels_max²,
+      T(0),T(2pi))
+
+    rays.origin[i]=rays[i](x[1,i])
+    θ=mod(x[2,i],2pi)
+    jj=ifelse(θ>θ_max,length(θ_radii), findlast(θ_radii.<= θ))
+
+
+    index[1,i]=ii
+    index[2,i]=jj
+    n₁=refractive_index_map[ii,jj]
+
+    ############
+    n₀₁=n₀/n₁
+    n₀₁²=n₀₁*n₀₁
+    ############
+    Normal.=GeoUtils._normal_vector_new(rays.origin[i],minoraxis_earth)
+    cosθₙ=-Normal⋅rays.direction[i]
+    sinθₙ² =n₀₁²*(1-cosθₙ*cosθₙ)
+    if sinθₙ²≤1
+      rays.direction[i]=n₀₁*rays.direction[i]+(n₀₁*cosθₙ-sqrt(1-sinθₙ²))*Normal
+    else
+      rays.direction[i]=rays.direction[i]-2*cosθₙ*Normal
+    end
+  end
+end
+
+
+
 # Find intersection with outmost level
 function find_first_intersection_ellipse(ray::Ray2D, # ray
   n₀;  #refractive index ray
@@ -242,8 +323,7 @@ function find_first_intersection_ellipse(ray::Ray2D, # ray
   h_levels_max=maximum(h_levels)
   # index of outmost level (to be sure it is sorted in the right order)
   ii=findfirst(h_levels.==h_levels_max)
-
-  # find intersection point
+   # find intersection point
   t_intersection=advance(BottomIntersection(),ray,scale_levels[ii])
 
   # find j on ellipse

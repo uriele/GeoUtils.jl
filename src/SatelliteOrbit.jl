@@ -470,6 +470,19 @@ end
 ###################################################################################################
 @inline _normal_vector(x0,y0,h,squared_eccentricity_earth)=Vec2(x0/(1+h)^2,y0/(sqrt(1-squared_eccentricity_earth)+h)^2) |> x->x/hypot(x...)
 @inline _tangent_vector(args...)=_normal_vector(args...) |> x-> Vec2(x.y,-x.x)
+
+@inline function _normal_vector_new(v::Vec2{T},b²::T)::Vec2{T} where T
+   yn=v[2]/b²
+  _magnitude=hypot(v[1],yn)
+  return Vec2(v[1]/_magnitude,yn/_magnitude)
+end
+
+@inline function _tangent_vector_new(v::Vec2{T},b²::T)::Vec2{T} where T
+  yn=v[2]/b²
+  _magnitude=hypot(yn,v[1])
+  return Vec2(yn/_magnitude,-v[1]/_magnitude)
+end
+
 # Create Rays from the orbit
 
 """
@@ -710,4 +723,163 @@ const TOP_LEVEL_INDEX=0
   #target = 1<index[1]<(length(h_levels)-1)
   target = false
   return (ray_out,target,h,index,radius_or_level)
+end
+
+
+
+function minimizing_function_distance_h²_from_surface!(
+  t::T,θ::T,origin::V2,
+  direction::V3,b::T,h²::T)::Tuple{Vec2{T},T,T}  where {
+    V2<:AbstractVector{T},
+    V3<:AbstractVector{T}
+  } where T<:Real
+
+  cosθ=cos(θ)
+  sinθ=sin(θ)
+  bsinθ=b*sinθ
+  bcosθ=b*cosθ
+  #b²=b*b
+  X=origin[1] + t*direction[1]-cosθ
+  Y=origin[2] + t*direction[2]-bsinθ
+
+  AB² = X*X + Y*Y
+  distance=AB²-h²
+  distance² =distance*distance
+  #=
+  if distance²<atol(T)
+    g.=T(0)
+    return h²
+  end
+  =#
+  twice_AB²_minus_h² = 2*(AB²-h²)
+  AB_Dᵣ = X*direction[1]+Y*direction[2]
+  AB_Tₑ = X*sinθ-Y*bcosθ
+  #Dᵣ² = direction[1]*direction[1]+direction[2]*direction[2]
+  Tₑ² = bcosθ*bcosθ+sinθ*sinθ
+  Dᵣ_Tₑ = direction[1]*sinθ-direction[2]*bcosθ
+  AB_A=X*cosθ+Y*bsinθ
+  eight_AB_Dᵣ_AB_Tₑ=8*AB_Dᵣ*AB_Tₑ
+
+  g1=2*AB_Dᵣ*(twice_AB²_minus_h²)
+  g2=2*AB_Tₑ*(1+twice_AB²_minus_h²)
+
+  #∇²f_11= 2*(Dᵣ²)*twice_AB²_minus_h² + 8*(AB_Dᵣ*AB_Dᵣ)
+  ∇²f_11= 2*twice_AB²_minus_h² + 8*(AB_Dᵣ*AB_Dᵣ)
+  ∇²f_22= 2*(AB_A+Tₑ²)*twice_AB²_minus_h² + 8*(AB_Tₑ*AB_Tₑ)+2*(AB_A+Tₑ²)
+  ∇²f_12= Dᵣ_Tₑ*twice_AB²_minus_h² + eight_AB_Dᵣ_AB_Tₑ
+  Denom=∇²f_11*∇²f_22-∇²f_12*∇²f_12
+  Denom+= (Denom<atol(T))*atol(T)
+
+
+
+
+  return (Vec2(( ∇²f_22*g1-∇²f_12*g2)./Denom,(-∇²f_12*g1+∇²f_11*g2)./Denom),
+    distance²+AB²  ,h²+(distance²>atol(T))*distance²)
+
+end
+
+
+
+@inline __h_t(x)=max(-x,0)
+#@inline __h_theta1(x,θmin)= max(θmin-x,0)
+#@inline __h_theta2(x,θmax)= max(x-θmax,0)
+
+
+function optimize_distance_h²_from_surface_lagrangian!(x::V,origin::V2,direction::V2,b::T,h²::T,θmin::T,θmax::T;rho=T(0.01),gamma=T(1.5),kmax=10)::T where {V<:AbstractArray{T},V2<:Vec2{T}} where T
+    _old=0.0
+    _h2=999.0
+
+    k=0
+    while true
+        k+=1
+        while true
+          _fun,_h2=minimizing_function_distance_h²_from_surface_lagrangian!(x,origin,direction,b,h²,rho,θmin,θmax)
+          err=abs(_fun-_old)
+          _old=_fun
+          if err<10^-15
+            #@info "err: $err h: $(sqrt(_h2))"
+            #@info "b: $(minoraxis), h2: $h2 x: $x"
+            break
+          end
+        end
+
+        rho*=gamma
+
+        if (x[1]>0)
+          break
+        end
+        if k>kmax
+          break
+        end
+    end
+
+    return _h2
+  end
+
+function minimizing_function_distance_h²_from_surface_lagrangian!(
+  x::V1,origin::V2,
+  direction::V3,b::T,h²::T,
+  rho::T,θmin::T,θmax::T)::Tuple{T,T}  where {
+    V1<:AbstractVector{T},
+    V2<:AbstractVector{T},
+    V3<:AbstractVector{T}
+  } where T<:Real
+
+  cosθ=cos(x[2])
+  sinθ=sin(x[2])
+  bsinθ=b*sinθ
+  bcosθ=b*cosθ
+  #b²=b*b
+  X=origin[1] + x[1]*direction[1]-cosθ
+  Y=origin[2] + x[1]*direction[2]-bsinθ
+
+  AB² = X*X + Y*Y
+  distance=AB²-h²
+  distance² =distance*distance
+  #=
+  if distance²<atol(T)
+    g.=T(0)
+    return h²
+  end
+  =#
+  twice_AB²_minus_h² = 2*(AB²-h²)
+  AB_Dᵣ = X*direction[1]+Y*direction[2]
+  AB_Tₑ = X*sinθ-Y*bcosθ
+  #Dᵣ² = direction[1]*direction[1]+direction[2]*direction[2]
+  Tₑ² = bcosθ*bcosθ+sinθ*sinθ
+  Dᵣ_Tₑ = direction[1]*sinθ-direction[2]*bcosθ
+  AB_A=X*cosθ+Y*bsinθ
+  eight_AB_Dᵣ_AB_Tₑ=8*AB_Dᵣ*AB_Tₑ
+
+
+
+
+  _ht=__h_t(x[1])
+  #_hθ1=__h_theta1(θ,θmin)
+  #_hθ2=__h_theta2(θ,θmax)
+
+  _dht=x[1]<0
+  #_dhθ1=(θ<θmin)
+  #_dhθ2=(θ>θmax)
+
+  penalty=0.5*rho*(_ht*_ht)#+_hθ1*_hθ1+_hθ2*_hθ2)#-lambda[1]*_ht #-lambda[2]*_hθ
+  ∂penalty_t= rho*_ht*_dht
+  #∂penalty_θ= rho*(_hθ1*_dhθ1+_hθ2*_dhθ2)
+
+  g1=2*AB_Dᵣ*(twice_AB²_minus_h²)+∂penalty_t #-lambda[1]*_dht
+  g2=2*AB_Tₑ*(1+twice_AB²_minus_h²)
+
+  #∇²f_11= 2*(Dᵣ²)*twice_AB²_minus_h² + 8*(AB_Dᵣ*AB_Dᵣ)
+  ∇²f_11= 2*twice_AB²_minus_h² + 8*(AB_Dᵣ*AB_Dᵣ)+rho*_dht
+  ∇²f_22= 2*(AB_A+Tₑ²)*twice_AB²_minus_h² + 8*(AB_Tₑ*AB_Tₑ)+2*(AB_A+Tₑ²)
+  ∇²f_12= Dᵣ_Tₑ*twice_AB²_minus_h² + eight_AB_Dᵣ_AB_Tₑ
+  Denom=∇²f_11*∇²f_22-∇²f_12*∇²f_12
+  Denom+= (Denom<atol(T))*atol(T)
+
+
+  x[1]-=0.5* ( ∇²f_22*g1-∇²f_12*g2)/Denom
+  x[2]-=0.5* (-∇²f_12*g1+∇²f_11*g2)/Denom
+
+  return (distance²+AB²+penalty  ,h²+(distance²>atol(T))*distance²)
+
 end
