@@ -404,32 +404,26 @@ eccentricity(ellipsoid(NormalizedEarth))
 # CONVERSIONS
 ##############
 
-function Base.convert(::Type{ECEF2D{Datum}},coords::LLA2D{Datum,T}) where {T,Datum}
+@inline function _from_lla2d_to_ecef2d(::Type{Datum},θ::T,h::T) where {T,Datum}
   🌎 = ellipsoid(Datum)
   majoraxis_earth = majoraxis(🌎) |> ustrip
   squared_eccentricity_earth= eccentricity²(🌎)
-  h=ustrip(coords.h)
-  θ=ustrip(coords.θ)
   sinθ=sind(θ)
   cosθ=cosd(θ)
   N=majoraxis_earth/sqrt(1-squared_eccentricity_earth*sinθ*sinθ)
   w=(N+h)*cosθ
   z=(N*(1-squared_eccentricity_earth)+h)*sinθ
-  return ECEF2D{Datum}(w,z)
+  return (w,z)
 end
 
-function Base.convert(::Type{LLA2D{Datum}},coords::ECEF2D{Datum,T}) where {T,Datum}
+@inline function _from_ecef2d_to_lla2d(::Type{Datum},p::T,z::T) where {T,Datum}
   🌎 = ellipsoid(Datum)
   majoraxis_earth = T(ustrip(majoraxis(🌎)))
   minoraxis_earth = T(ustrip(minoraxis(🌎)))
   squared_eccentricity_earth = T(eccentricity²(🌎))
-  z = ustrip(coords.z)
-  p = ustrip(coords.w)
   e′² = squared_eccentricity_earth / (1 - squared_eccentricity_earth)
   ψ = atand(majoraxis_earth * z, minoraxis_earth * p)
   ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ψ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ψ)^3),360)
-  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
-  #ϕ = mod1(atand(z + minoraxis_earth * e′² * sind(ϕ)^3, p - majoraxis_earth * squared_eccentricity_earth * cosd(ϕ)^3),360)
 
   N = majoraxis_earth / sqrt(1 - squared_eccentricity_earth * sind(ϕ)^2)
   ## Fix for the condition cosθ=0, in that case subtract the
@@ -441,5 +435,18 @@ function Base.convert(::Type{LLA2D{Datum}},coords::ECEF2D{Datum,T}) where {T,Dat
     h =abs(z)-minoraxis_earth
   end
 
-  return LLA2D{Datum}(h,ϕ)
+  return (ϕ,h)
+end
+
+
+function Base.convert(::Type{ECEF2D{Datum}},coords::LLA2D{Datum,T}) where {T,Datum}
+  h=ustrip(coords.h)
+  θ=ustrip(coords.θ)
+  return ECEF2D{Datum}(_from_lla2d_to_ecef2d(Datum,θ,h)...)
+end
+
+function Base.convert(::Type{LLA2D{Datum}},coords::ECEF2D{Datum,T}) where {T,Datum}
+  z = ustrip(coords.z)
+  p = ustrip(coords.w)
+  return LLA2D{Datum}(_from_ecef2d_to_lla2d(Datum,z,p)...)
 end

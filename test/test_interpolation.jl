@@ -3,7 +3,48 @@ testfile="../data_atm/INP_FILES"
 # Read atmosphere
 if isdir(testfile)
   #read local atmosphere
+
+
+
   atmosphere=read_local_atmosphere(testfile);
+  @testset "Test Ray Tracing File Reading" begin
+    @testset "Test new atmosphere reader" begin
+      atmosphere_old_reader=GeoUtils.read_local_atmosphere_old(testfile);
+      @test atmosphere_old_reader == atmosphere
+    end
+
+    orbit_old=GeoUtils.read_orbit_old("$testfile/orbit.dat")
+    @testset "Test new orbit" begin
+      transposed_orbit=read_orbit("$testfile/orbit.dat")
+
+      orbit=StructArray{SatOrbit{Float64},1}(undef,size(transposed_orbit,2),size(transposed_orbit,1))
+
+      for (o1,to1) in zip(StructArrays.components(orbit),StructArrays.components(transposed_orbit))
+        @inbounds o1.=transpose(to1)
+      end
+        @test orbit == orbit_old
+    end
+    orbit_normalized=deepcopy(orbit_old)
+    normalize_datum!(orbit_normalized)
+
+    for (datumtype,orb) in zip(["WGS84Latest","Normalized"],[orbit_old,orbit_normalized])
+      @testset "Test $datumtype orbit from rays" begin
+        rays=create_bundle_rays(orb);
+        prealloc_rays=StructArray{Ray2D{Float64}}(undef,size(orb));
+        rays_from_orbit!(prealloc_rays,orb);
+        if datumtype=="Normalized"
+          @test all(rays._normalized .== true)
+          @test all(prealloc_rays._normalized .== true)
+        else
+          @test all(rays._normalized .== false)
+          @test all(prealloc_rays._normalized .== false)
+        end
+
+        @test rays == prealloc_rays
+      end
+    end
+
+  end
 
   #define interpolation points
   θᵢ=" 0.00      1.00      2.00      3.00      4.00      5.00      6.00

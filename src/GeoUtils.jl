@@ -27,6 +27,7 @@ module GeoUtils
   using CoordRefSystems:ellipfromab
   using LinearAlgebra: ⋅
   using Polyester: @batch  # for batch processing
+  #using Mmap: mmap
   ####
   #using GeoUtils
   #using CoordRefSystems
@@ -117,6 +118,8 @@ module GeoUtils
   export convert_surface_angle_geodesic_to_geocentric_deg!,convert_surface_angle_geodesic_to_geocentric_rad!
   export create_radii_from_θ,scale_earth_by_h
   export setDebugIntersection,getDebugIntersection
+
+  export create_bundle_rays,rays_from_orbit!
   #export AzimuthElevationRange,AER
   #export EastNorthUp,ENU
 end

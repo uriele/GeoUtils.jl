@@ -1,5 +1,5 @@
 abstract type AbstractLocalAtmosphere{Datum,T<:IEEEFloat} end
-const KM{T}=Quantity{T,𝐋,typeof(km)}
+#const KM{T}=Quantity{T,𝐋,typeof(km)}
 
 """
 
@@ -41,6 +41,87 @@ LocalAtmosphere2D(pressure::T,temperature::T,h::T,θ::T) where T = LocalAtmosphe
 end
 
 
+"""
+  $Module.read_local_atmosphere_old([::Type=Float64],folder::String;kwargs...)
+
+Old interface to read the local atmosphere from the folder. Used for testing purposes. Please use the exporter [`read_local_atmosphere`](@ref) instead.
+"""
+function read_local_atmosphere_old(::Type{T},folder::String;
+  skip_altitude=16,skip_latitude=15,skip_temperature=13,skip_pressure=13,
+  units_pressure::Unitful.PressureUnits=u"mbar",
+  units_temperature::Unitful.TemperatureUnits=u"K",
+  units_altitude::Unitful.LengthUnits=u"km",
+  units_latitude::Unitful.FreeUnits=u"°",
+  datum::Datum=WGS84Latest,
+  normalize::Bool=true
+  )::StructArray where {T,Datum}
+  @assert(units_latitude==u"°" || units_latitude==u"rad", "units_latitude must be either u\"°\" or u\"rad\"")
+
+  # Read the data and convert to degree
+  θ=convert_to_array(T,"$(folder)/in_lat.dat";skip=skip_latitude) |>
+  x-> uconvert.(u"°",x.*units_latitude) |> x-> ustrip.(x)
+
+  # Read the data and convert to km
+  h=convert_to_array(T,"$(folder)/in_alt.dat";skip=skip_altitude) |>
+  x-> uconvert.(u"km",x.*units_altitude) |> x-> ustrip.(x)
+
+  # Read the data and convert to °C
+  temperature=convert_to_array(T,"$(folder)/in_temp.dat";skip=skip_temperature) |>
+  x-> uconvert.(u"°C",x.*units_temperature) |> x-> ustrip.(x) |>
+  x-> reshape(x,(length(h),length(θ)))
+
+  # Read the data and convert to Pa
+  pressure=convert_to_array(T,"$(folder)/in_pres.dat";skip=skip_pressure) |>
+  x-> uconvert.(u"Pa",x.*units_pressure) |> x-> ustrip.(x) |>
+  x-> reshape(x,(length(h),length(θ)))
+
+  majoraxis_earth=majoraxis(ellipsoid(datum)) |> x-> uconvert(km,x) |> ustrip
+  squared_eccentricity_earth=eccentricity²(ellipsoid(datum))
+
+  if normalize
+
+    _normalize_ellipse!(h,majoraxis_earth)
+    setNormalizedEarth(squared_eccentricity_earth)
+    datum=NormalizedEarth
+  end
+
+  StructArray(
+  [
+      LocalAtmosphereLLA2D(datum,
+        pressure[i,j],
+        temperature[i,j],
+        h[i],
+        θ[j]
+        )
+    for i in eachindex(h), j in eachindex(θ)
+  ]
+  )
+end
+
+read_local_atmosphere_old(folder::String;kwargs...)=read_local_atmosphere_old(Float64,folder;kwargs...)
+
+
+
+"""
+  read_local_atmosphere([::Type=Float64],folder::String;kwargs...)
+
+Read the local atmosphere from the folder. and return a StructArray with the local atmosphere. If the given type is not specified, it will default to Float64.
+
+# Arguments
+- `folder::String`: The folder where the data is stored
+
+# Optional arguments
+- `skip_altitude=16`: The number of lines to skip in the altitude file `in_alt.dat` found in the `folder`
+- `skip_latitude=15`: The number of lines to skip in the latitude file `in_lat.dat` found in the `folder`
+- `skip_temperature=13`: The number of lines to skip in the temperature file `in_temp.dat` found in the `folder`
+- `skip_pressure=13`: The number of lines to skip in the pressure file `in_pres.dat` found in the `folder`
+- `units_pressure::Unitful.PressureUnits=u"mbar"`: The units of the pressure in the pressure file
+- `units_temperature::Unitful.TemperatureUnits=u"K"`: The units of the temperature in the temperature file
+- `units_altitude::Unitful.LengthUnits=u"km"`: The units of the altitude in the altitude file
+- `units_latitude::Unitful.FreeUnits=u"°"`: The units of the latitude in the latitude file
+- `datum::Datum=WGS84Latest`: The datum of the Earth
+- `normalize::Bool=true`: Normalize the altitude to the major axis of the Earth
+"""
 function read_local_atmosphere(::Type{T},folder::String;
   skip_altitude=16,skip_latitude=15,skip_temperature=13,skip_pressure=13,
   units_pressure::Unitful.PressureUnits=u"mbar",
@@ -78,22 +159,27 @@ function read_local_atmosphere(::Type{T},folder::String;
     _normalize_ellipse!(h,majoraxis_earth)
     setNormalizedEarth(squared_eccentricity_earth)
     datum=NormalizedEarth
-end
+  end
 
-  StructArray(
-  [
-      LocalAtmosphereLLA2D(datum,
-        pressure[i,j],
-        temperature[i,j],
-        h[i],
-        θ[j]
-        )
-    for i in eachindex(h), j in eachindex(θ)
-  ]
-  )
-end
+  atmosphere=StructArray{LocalAtmosphere2D{datum,T}}(undef,length(h),length(θ))
 
+  #tmosphere.temperature[:]=temperature
+  #atmosphere.pressure[:]=pressure
+  #atmosphere.h[:]=repeat(h;outer=length(θ))
+  #atmosphere.θ[:]=repeat(θ;inner=length(h))
+  @batch for j in axes(atmosphere,2)
+    for i in axes(atmosphere,1)
+    @inbounds (atmosphere.temperature[i,j],atmosphere.pressure[i,j],atmosphere.h[i,j],atmosphere.θ[i,j])=(temperature[i,j],pressure[i,j],h[i],θ[j])
+    @inbounds (atmosphere.w[i,j],atmosphere.z[i,j])=_from_lla2d_to_ecef2d(datum,θ[j],h[i])
+    end
+  end
+
+  return atmosphere
+
+
+end
 read_local_atmosphere(folder::String;kwargs...)=read_local_atmosphere(Float64,folder;kwargs...)
+
 
 @inline function _convertellipse2cartesian(θ::T,h::T,majoraxis_earth::T,squared_eccentricity_earth::T)::NTuple{2,T} where T
   N=majoraxis_earth/sqrt(1+squared_eccentricity_earth*sind(θ)*sind(θ))
@@ -375,6 +461,73 @@ end
         refraction_interpolated
 end
 
+
+@inline function _discretize_lowallocation_new!(pressure_interpolated::SC,temperature_interpolated::SC,refraction_interpolated::SC,
+  pressure_knots::M,
+  temperature_knots::M,
+  h_knots::V1,θ_knots::V2,hᵢ::G,θᵢ::G;wavelength=10.0,
+  model=Ciddor(),
+  interpolation_pressure=LinearPressure(),
+  kwargs...) where {SC<:AbstractMatrix{T},M<:AbstractMatrix{T},V1<:AbstractVector{T},V2<:AbstractVector{T},G} where T
+
+  idx_h=Vector{Int}(undef,length(h_knots))
+  idx_θ=Vector{Int}(undef,length(θ_knots))
+  sortperm!(idx_h,h_knots)
+  sortperm!(idx_θ,θ_knots)
+  h_knots[:]= view(h_knots,idx_h)
+  θ_knots[:]= view(θ_knots,idx_θ)
+
+
+  pressure_knots[:,:]=view(pressure_knots,idx_h,idx_θ)
+  temperature_knots[:,:]=view(temperature_knots,idx_h,idx_θ)
+
+
+  sort!(hᵢ;rev=true)
+  sort!(θᵢ;rev=false)
+  radii=length(θᵢ)
+
+  pressure_interpolated_θ=Matrix{T}(undef,length(h_knots),radii)
+  temperature_interpolated_θ=Matrix{T}(undef,length(h_knots),radii)
+  #write over the radii to update the value
+  for i in axes(pressure_interpolated_θ,1)
+    @inbounds _interpolate_pt_theta!(
+      view(pressure_interpolated_θ,i,:),
+      view(temperature_interpolated_θ,i,:),
+      view(θ_knots,:),
+      view(pressure_knots,i,:),
+      view(temperature_knots,i,:),
+      view(θᵢ,:),
+      Periodic())
+  end
+
+  # Average Across Height (linear for temperature, exponential for pressure)
+
+  @debug "Using $(typeof(model)) model for refractive index"
+
+  for j in axes(refraction_interpolated,2)
+      @inbounds _interpolate_pt_h!(
+        interpolation_pressure,
+        view(pressure_interpolated,:,j),
+        view(temperature_interpolated,:,j),
+        view(h_knots,:),
+        view(pressure_interpolated_θ,:,j),
+        view(temperature_interpolated_θ,:,j),
+        view(hᵢ,:),
+        Flat())
+
+      for i in axes(refraction_interpolated,1)
+          @inbounds refraction_interpolated[i,j]= refractive_index(model;
+          wavelength=wavelength,
+          temperature=temperature_interpolated[i,j],
+          pressure=pressure_interpolated[i,j],CO2ppm=0.0)
+        end
+
+    end
+
+  return nothing
+end
+
+
 struct SatOrbit{T<:IEEEFloat}
     z::T
     w::T
@@ -384,20 +537,35 @@ struct SatOrbit{T<:IEEEFloat}
     _normalized::Bool
     _islimb::Bool
 
-    @inline SatOrbit{T}(z::T,w::T,ang::T,h::T,other::T,normalized::Bool=false,islimb::Bool=true) where T = new(z,w,ang,h,other,normalized,islimb)
+    @inline SatOrbit{T}(z::T,w::T,ang::T,h::T,orbital_coordinate::T,normalized::Bool=false,islimb::Bool=true) where T = new(z,w,ang,h,orbital_coordinate,normalized,islimb)
 end
 
 """
-  SatOrbit(z,w,ang,h,orbital_coordinate)
+  SatOrbit(z,w,ang,h,orbital_coordinate;normalized::Bool=false,islimb::Bool=true)
 
-Define an orbit for the satellite
+Define an orbit for the satellite.
+
+  # Arguments
+  - `z::T`: The z coordinate can be given in Unitful.Unit of length ot as a Real number. The default unit is km.
+  - `w::T`: The w coordinate can be given in Unitful.Unit of length ot as a Real number. The default unit is km.
+  - `ang::T`: The angle of the FOV for the measument, given in degrees.
+  - `h::T`: The altitude of the satellite, given in Unitful.Unit of length ot as a Real number. The default unit is km.
+  - `orbital_coordinate::T`: The orbital coordinate with respect to the center of the Earth, given in degrees.
+
+  # Optional arguments
+  - `normalized::Bool=false`: Normalize the orbit with respect to the Earth's major axis
+  - `islimb::Bool=true`: The direction of the FOV
+        - if true is given with respect to the limb angle to the center of the Earth
+        - if false is given with respect to the nadir angle to the center of the Earth
+
+  !! note: islimb= false is not yet implemented
 """
-SatOrbit(z::T,w::T,ang::T,h::T,orbital_coordinate::T) where T<:IEEEFloat = SatOrbit{T}(z,w,ang,h,orbital_coordinate)
-SatOrbit(z::I,w::I,ang::I,h::I,orbital_coordinate::I) where I<:Integer = SatOrbit(float.([z,w,ang,h,orbital_coordinate])...)
-SatOrbit(z::Real,w::Real,ang::Real,h::Real,orbital_coordinate::Real) = SatOrbit(promote(z,w,ang,h,orbital_coordinate)...)
-SatOrbit(z::KM,w::KM,ang,h::KM,orbital_coordinate) = SatOrbit(ustrip(z),ustrip(w),ang,ustrip(h),orbital_coordinate)
-SatOrbit(z::Unitful.Length,w::Unitful.Length,ang,h::Unitful.Length,orbital_coordinate) =
-SatOrbit(uconvert(km,z),uconvert(km,w),ang,uconvert(km,h),orbital_coordinate)
+SatOrbit(z::T,w::T,ang::T,h::T,orbital_coordinate::T;normalized::Bool=false,islimb::Bool=true) where T<:IEEEFloat = SatOrbit{T}(z,w,ang,h,orbital_coordinate,normalized,islimb)
+SatOrbit(z::I,w::I,ang::I,h::I,orbital_coordinate::I;kwargs...) where I<:Integer = SatOrbit(float.([z,w,ang,h,orbital_coordinate])...;kwargs...)
+SatOrbit(z::Real,w::Real,ang::Real,h::Real,orbital_coordinate::Real;kwargs...) = SatOrbit(promote(z,w,ang,h,orbital_coordinate)...;kwargs...)
+SatOrbit(z::KM,w::KM,ang,h::KM,orbital_coordinate;kwargs...) = SatOrbit(ustrip(z),ustrip(w),ang,ustrip(h),orbital_coordinate;kwargs...)
+SatOrbit(z::Unitful.Length,w::Unitful.Length,ang,h::Unitful.Length,orbital_coordinate;kwargs...) =
+SatOrbit(uconvert(km,z),uconvert(km,w),ang,uconvert(km,h),orbital_coordinate;kwargs...)
 
 altitude(o::SatOrbit) = o.h
 satellite_angle(o::SatOrbit) = o.ang
@@ -407,31 +575,12 @@ isnadir(o::SatOrbit) = !o._islimb
 isnormalized(o::SatOrbit) = o._normalized
 
 
-function __read_orbit(::Type{T},file::String) where T
-  open(file) do f
-    lines=readlines(f)
+"""
+  GeoUtils.read_orbit_old([::Type=Float64],file::String)
 
-    pos=findall(x->!isnothing(match(r"^\sSEQUENCE",x)),lines);
-
-    nseq=length(pos)
-    mgeom=parse(Int,lines[pos[1]+6])
-    orb=Matrix{SatOrbit{T}}(undef,nseq,mgeom)
-
-    for j in 1:mgeom
-      jj=7+j
-      for i in eachindex(pos)
-        sj=pos[i]+jj
-        orb[i,j]=SatOrbit(parse.(T,split(lines[sj]))...)
-      end
-    end
-
-    return orb
-  end
-end
-
-__read_orbit(file::String)=__read_orbit(Float64,file)
-
-function read_orbit(::Type{T},file::String) where T
+Old interface to read the orbit from the file and return a StructArray with the orbit. Used for testing purposes. Please use the exporter [`read_orbit`](@ref) instead.
+"""
+function read_orbit_old(::Type{T},file::String) where T
   open(file) do f
     lines=readlines(f)
     (nseq,mgeom,seq)=findall(x->!isnothing(match(r"^\sSEQUENCE",x)),lines) |>
@@ -453,8 +602,38 @@ function read_orbit(::Type{T},file::String) where T
   end
 end
 
-read_orbit(file::String)=read_orbit(Float64,file)
+read_orbit_old(file::String)=read_orbit_old(Float64,file)
 
+
+
+"""
+  read_orbit([::Type=Float64],file::String)
+
+Read the orbit from the file and return a StructArray with the orbit. If the given type is not specified, it will default to Float64.
+
+See also: [`SatOrbit`](@ref)
+"""
+function read_orbit(::Type{T},file::String) where T
+  open(file) do f
+    lines=readlines(f)
+    (init_seq,nseq,len_seq)=findall(x->!isnothing(match(r"^\sSEQUENCE",x)),lines) |>
+    x-> (x,length(x),parse.(Int,lines[x.+6]))
+
+
+    orb=StructArray{SatOrbit{T}}(undef,maximum(len_seq),nseq)
+    for j in axes(orb,2)
+      _init_seq=init_seq[j]+7;
+      for i in 1:len_seq[j]
+        (z,w,ang,h,orbital_coordinate) = parse.(T,split(lines[_init_seq+i]))
+        @inbounds (orb.z[i,j],orb.w[i,j],orb.ang[i,j],orb.h[i,j],orb.orbital_coordinate[i,j])=(z,w,ang,h,orbital_coordinate)
+        @inbounds (orb._normalized[i,j],orb._islimb[i,j])=(false,true)
+      end
+    end
+    return orb
+  end
+end
+
+read_orbit(file::String)=read_orbit(Float64,file)
 
 """
   normalize_datum!([datum=WGS84Latest],sorbit::StructArray{SatOrbit})

@@ -4,6 +4,7 @@ using Test
 using Aqua
 using Unitful: °,km,ustrip
 using CoordRefSystems
+using StructArrays
 
 include("test_orbit.jl")
 include("test_semicircular.jl")
@@ -38,6 +39,9 @@ if isdir(filedir)
     end
   end
 end
+
+
+
 
 include("test_orbit.jl")
 

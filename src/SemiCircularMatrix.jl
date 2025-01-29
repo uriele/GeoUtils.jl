@@ -8,13 +8,19 @@
 """
 struct SemiCircularArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
   data::A
+
+  S
   SemiCircularArray{T,N}(data::A) where A<: AbstractArray{T,N} where {T,N} = new{T,N,A}(data)
   SemiCircularArray{T,N,A}(data::A) where A<: AbstractArray{T,N} where {T,N} = new{T,N,A}(data)
 end
 
 #const SemiCircularArray{T,1}(data::A) where A<:AbstractVector{T} where T = CircularVector{T}(data)
 
+function SemiCircularArray{T}(::Base.UndefInitializer, sz::Dims) where {T}
+  SemiCircularArray(Array{T}(undef, sz))
+end
 
+SemiCircularArray{T}(u::Base.UndefInitializer, d::Integer...) where {T} = SemiCircularArray{T}(u, convert(Dims, d))
 """
   SemiCircularVector{T} <: AbstractVector{T}
 

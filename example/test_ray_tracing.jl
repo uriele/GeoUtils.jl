@@ -176,11 +176,6 @@ _find_first_intersection_ellipse(ray,n₀)=find_first_intersection_ellipse(ray::
 rays2=deepcopy(rays[:])
 θᵢ_effective
 
-
-Dray=rays1.origin-rays2.origin
-hypray=[hypot(dray...) for dray in Dray]
-extrema(hypray)
-ix=findfirst(hypray.==maximum(hypray))
 index=zeros(Int,2,length(rays2))
 x0=zeros(Float64,2,length(rays2))
 
@@ -198,8 +193,13 @@ _NN(t,b)=1/sqrt(cosd(t)^2+b^2*sind(t)^2)
 hmax=maximum(hᵢ)
 lines!(ax,[Point2f((_NN(t,minoraxis_earth)+hmax)cosd(t),(minoraxis_earth^2*_NN(t,minoraxis_earth)+hmax)*sind(t)) for t in LinRange(0,360,1000)],color=:black)
 
+Dray=rays1.origin-rays2.origin
+hypray=[hypot(dray...) for dray in Dray]
+extrema(hypray)
+ix=findfirst(hypray.==maximum(hypray))
 
-find_input_interception_new_lagrangian2!(index,x0,rays2,n₀,refractive,hᵢ,θᵢ_effective)
+
+find_input_interception_new_lagrangian2!(index,x0,rays2,$n₀,$refractive,$hᵢ,$θᵢ_effective)
 _totest(rays1,register,tangent_quote,wedge_index,n₀)
 @benchmark find_input_interception_new_lagrangian!($index,$x0,$rays2, # ray
   n₀;  #refractive index ray

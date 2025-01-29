@@ -57,9 +57,12 @@ end
 
 ########
 # Read atmosphere
+using BenchmarkTools
+
 atmosphere=read_local_atmosphere("./data_atm/INP_FILES");
 
-θᵢ=" 0.00      1.00      2.00      3.00      4.00      5.00      6.00
+
+ θᵢ=" 0.00      1.00      2.00      3.00      4.00      5.00      6.00
 7.00      8.00      9.00     10.00     11.00     12.00     13.00
 14.00     15.00     16.00     17.00     18.00     19.00     20.00
 21.00     22.00     23.00     24.00     25.00     26.00     27.00
@@ -173,17 +176,37 @@ x-> [parse(Float64,y) for y in x]./majoraxis_earth;
 # Generate discretized atmosphere using the knots
 pressure,temperature,refractive=discretize_atmosphere(atmosphere,hᵢ,θᵢ; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
 
+#= No Discernable Advantage here #
+pressure=SemiCircularArray{Float64}(undef, length(hᵢ)-1, length(θᵢ)) ;
+temperature=SemiCircularArray{Float64}(undef, length(hᵢ)-1, length(θᵢ));
+refractive=SemiCircularArray{Float64}(undef, length(hᵢ)-1, length(θᵢ));
+@benchmark GeoUtils._discretize_lowallocation_new!(
+  view($pressure,:,:),view($temperature,:,:),view($refractive,:,:),
+  view($atmosphere.pressure,:,:),
+  view($atmosphere.temperature,:,:),
+  view($atmosphere.h,:,1),
+  view($atmosphere.θ,1,:),
+  view($hᵢ,:),view($θᵢ,:);
+  model=MODEL[],
+  interpolation_pressure=INTERPOLATION[])
+=#
+
+
 ############################################
 # get coordinates in LLA and ECEF
 #########################################
-idx270=findfirst(θᵢ.==90.0+180);
-θᵢ=SemiCircularVector(θᵢ) |> x->  x[idx270:end+idx270-1];
+begin
+  idx270=findfirst(θᵢ.==90.0+180);
+  θᵢ=SemiCircularVector(θᵢ) |> x->  x[idx270:end+idx270-1];
 
-θᵢ.+=90.0;
-θᵢ.=mod.(θᵢ,360.0);
-pressure.=pressure[:,idx270:end+idx270-1];
-temperature.=temperature[:,idx270:end+idx270-1];
-refractive.=refractive[:,idx270:end+idx270-1];
+  θᵢ.+=90.0;
+  θᵢ.=mod.(θᵢ,360.0);
+  pressure.=pressure[:,idx270:end+idx270-1];
+  temperature.=temperature[:,idx270:end+idx270-1];
+  refractive.=refractive[:,idx270:end+idx270-1];
+end
+
+
 ##########################################
 # Used reversed in discretize_atmosphere
 sort!(hᵢ;rev=true);
@@ -194,28 +217,70 @@ sort!(hᵢ;rev=true);
   scale_levels2,
   line_radii2
 )=getIntersectionObjects(NormalizedEarth(),hᵢ,θᵢ);
-# although I will need a new structure for the angles
 
+# although I will need a new structure for the angles
 θᵢ_effective= GeoUtils._surface_from_geodesic_θrad_to_geocentric_θrad.(deg2rad.(θᵢ));
-θᵢ_effective
+
+
 # create rays
 #@benchmark orbit=read_orbit("./data_atm/INP_FILES/orbit.dat")
 #orbit1=GeoUtils.__read_orbit("./data_atm/INP_FILES/orbit.dat");
 #normalize_datum!(orbit1)
 #|> # read the orbit file
-orbit=read_orbit("./data_atm/INP_FILES/orbit.dat");
-normalize_datum!(orbit);
+transposed_orbit=read_orbit("./data_atm/INP_FILES/orbit.dat")
 
-using BenchmarkTools
-#rays= create_rays.(orbit) # create the rays
+orbit=StructArray{SatOrbit{Float64},1}(undef,size(transposed_orbit,2),size(transposed_orbit,1))
 
-####### TO DO CHECK NEW STRUCTURE _Ray2 instead of Ray2D
-#
-#
-#
-###########################################################
+for (o1,to1) in zip(StructArrays.components(orbit),StructArrays.components(transposed_orbit))
+  @inbounds o1.=transpose(to1)
+end
 
-rays=GeoUtils.create_bundle_rays(Float64,orbit)
+normalize_datum!(orbit)
+
+
+@benchmark create_bundle_rays(Float64,$orbit)
+@benchmark begin
+  $rr2=StructArray{Ray2D{Float64}}(undef,size($orbit));
+  rays_from_orbit!($rr2,$orbit)
+end
+
+rr2=StructArray{Ray2D{Float64}}(undef,length(orbit));
+rays_from_orbit!(rr2,orbit)
+
+
+x0=fill(0.0,(2,length(rr2)))
+slack=fill(0.0,(3,length(rr2)))
+ii=1
+
+hᵢ_max=maximum(hᵢ)
+hᵢ_max²=hᵢ_max*hᵢ_max
+θmin=atan(rr2.origin[ii][2],rr2.origin[ii][1])
+θmax=θmin+2pi
+
+for ii in eachindex(rr2)
+  θmin=atan(rr2[ii].origin[2],rr2[ii].origin[1])
+  θmax=θmin+2pi
+  x0[2,ii]=θmin
+  GeoUtils.optimization_augmented_lagrangian!(view(x0,:,ii),rr2.origin[ii],rr2.direction[ii],reduced_minoraxis_earth,hᵢ_max²,θmin,θmax,view(slack,:,ii));
+  rr2.origin[ii]=rr2.origin[ii]+rr2.direction[ii]*x0[1,ii]
+end
+
+using Makie,WGLMakie
+
+perp=StructArray{Ray2D{Float64}}(undef,length(rr2))
+for ii in eachindex(rr2)
+  perp.origin[ii]=Vec2(cos(x0[2,ii]),reduced_minoraxis_earth*sin(x0[2,ii]))
+end
+
+v=rr2.origin-perp.origin
+hs=[hypot(x[1],x[2]) for x in v]
+
+extrema(hs)
+
+
+fig=Figure()
+ax=Axis(fig[1,1])
+scatter!(ax,rr2.origin[:])
 
 
 
@@ -234,7 +299,8 @@ function find_input_interception_new_lagrangian2!(index,x,rays::Ar, # ray
 
    @inbounds for i in eachindex(rays)
 
-    h²=GeoUtils.optimize_distance_h²_from_surface_lagrangian!(view(x,:,i),
+    x[2,i]=atan(rays[i].origin[2],rays[i].origin[1])
+    h²=GeoUtils.optimize_distance_h²_from_surface_lagrangian2!(view(x,:,i),
       rays.origin[i],rays.direction[i],minoraxis_earth,h_levels_max²,
       T(0),T(2pi))
 
@@ -252,24 +318,225 @@ function find_input_interception_new_lagrangian2!(index,x,rays::Ar, # ray
     n₀₁²=n₀₁*n₀₁
     ############
     _hypot=hypot(rays[i].origin[1],rays[i].origin[2]*invb2)
-    Normal=Vec2(rays[i].origin[1]/_hypot,rays[i].origin[2]*invb2/_hypot)
-    cosθₙ=-Normal⋅rays.direction[i]
+    Normal_x=rays[i].origin[1]/_hypot
+    Normal_y=rays[i].origin[2]*invb2/_hypot
+    cosθₙ=-(Normal_x*rays[i].direction[1]+Normal_y*rays[i].direction[2])
     sinθₙ² =n₀₁²*(1-cosθₙ*cosθₙ)
     if sinθₙ²≤1
-      rays.direction[i]=n₀₁*rays.direction[i]+(n₀₁*cosθₙ-sqrt(1-sinθₙ²))*Normal
+      tmp=(n₀₁*cosθₙ-sqrt(1-sinθₙ²))
+      rays.direction[i]=Vec2(n₀₁*rays[i].direction[1]+tmp*Normal_x,n₀₁*rays[i].direction[1]+tmp*Normal_y)
     else
-      rays.direction[i]=rays.direction[i]-2*cosθₙ*Normal
+      rays.direction[i]=Vec2(rays[i].direction[1]-2*cosθₙ*Normal_x,rays[i].direction[2]-2*cosθₙ*Normal_y)
     end
   end
 end
 
+function _first_input(index::A1,x::A2,_origin::B1,_direction::B2,n₀::T,b::T,invb2::T,hlevel²::T,refractive,θ_radii,θ_max) where {A1<:AbstractArray,A2<:AbstractArray,B1<:AbstractArray{V},B2<:AbstractArray{V}} where V<:Vec2{T} where T
+    x[2]=atan(_origin[1][2],_origin[1][1])
+    h²=GeoUtils.optimize_distance_h²_from_surface_lagrangian2!(x,
+      _origin[1],_direction[1],b,h_levels_max²,
+      x[2],T(4pi))
+
+    _origin[1]=_origin[1]+_direction[1]*x[1]
+    x[2]=mod(x[2],2pi)
+    jj=ifelse(x[2]>θ_max,length(θ_radii), searchsortedlast(θ_radii, x[2]))
+
+    index[1]=1
+    index[2]=jj
+    n₁=refractive[jj]
 
 
+    ############
+    n₀₁=n₀/n₁
+    n₀₁²=n₀₁*n₀₁
+    ############
+    _hypot=hypot(_origin[1][1],_origin[1][2]*invb2)
+      Normal_x=_origin[1][1]/_hypot
+      Normal_y=_origin[1][2]*invb2/_hypot
+    # It's a radius
+    if (h²-hlevel²)> 10^-10
+      (Normal_x,Normal_y)=(Normal_y,-Normal_x)
+    end
+    _bendme!(_direction,Normal_x,Normal_y,n₀₁,n₀₁²)
+    return h²
+end
 
+const ACCEPTED_ERROR=10^-10
+
+function _next_input(index::A1,x::A2,_origin::B1,_direction::B2,n₀::T,hlevel²::T,refractive_radius::T,
+  refractive_level::T,θ_prev::T,θ_next::T,b::T,invb2::T,isdescending::Bool)::Tuple{T,Bool} where {A1<:AbstractArray,A2<:AbstractArray,
+  B1<:AbstractArray{V},B2<:AbstractArray{V}} where V<:Vec2{T} where T<:IEEEFloat
+
+  # invert theta if looping
+  (θ_min,θ_max)=(θ_prev>θ_next) ? (θ_next,θ_prev) : (θ_prev,θ_next)
+
+  h²=GeoUtils.optimize_distance_h²_from_surface_lagrangian2!(x,
+    _origin[1],_direction[1],b,hlevel²,
+    θ_min,θ_max)
+
+  _origin[1]=_origin[1]+_direction[1]*x[1]
+  Δh²=abs(h²-hlevel²)
+
+  n₁=n₀
+  # if true becomes false
+  isdescending=!isdescending #flip
+#  @info "Δh² = $Δh² h²=$h² hlevel²=$hlevel², x=$x"
+  if Δh²<=GeoUtils.atol(T)  # if it hits the level
+    @info "get level"
+    isdescending=!isdescending #flop
+    index[1]+=(isdescending)-!(isdescending)
+    n₁=refractive_level;
+  elseif abs(x[2]-θ_next)<=GeoUtils.atol(T) # if it hits the next radius
+    @info "get radius"
+    isdescending=!isdescending #flop
+    index[2]+=index[2]+1
+    n₁=refractive_radius;
+  end
+
+  ############
+  n₀₁=n₀/n₁
+  n₀₁²=n₀₁*n₀₁
+  ############
+  _hypot=hypot(_origin[1][1],_origin[1][2]*invb2)
+    Normal_x=_origin[1][1]/_hypot
+    Normal_y=_origin[1][2]*invb2/_hypot
+  # It's a radius
+  if (h²-hlevel²)> 10^-10
+    (Normal_x,Normal_y)=(Normal_y,-Normal_x)
+  end
+  _bendme!(_direction,Normal_x,Normal_y,n₀₁,n₀₁²)
+  return h²,isdescending
+end
+
+function _bendme!(_direction::A,Normal_x::T,Normal_y::T,n₀₁::T,n₀₁²::T) where A<:AbstractArray{V} where V<:Vec2{T} where T
+  cosθₙ=-(Normal_x*_direction[1][1]+Normal_y*_direction[1][2])
+  sinθₙ² =n₀₁²*(1-cosθₙ*cosθₙ)
+  if sinθₙ²≤1
+    tmp=(n₀₁*cosθₙ-sqrt(1-sinθₙ²))
+    dx=n₀₁*_direction[1][1]+tmp*Normal_x
+    dy=n₀₁*_direction[1][2]+tmp*Normal_y
+    invmagnitude=1/hypot(dx,dy)
+    _direction[1]=Vec2(dx*invmagnitude,dy*invmagnitude)
+  else
+    dx=_direction[1][1]-2*cosθₙ*Normal_x
+    dy=_direction[1][2]-2*cosθₙ*Normal_y
+    invmagnitude=1/hypot(dx,dy)
+    _direction[1]=Vec2(dx,dy)
+  end
+end
+rays=rays[:]
+rays2=deepcopy(rays)
+index=zeros(Int,2,length(rays))
+x0=zeros(Float64,2,length(rays))
+b=minoraxis(ellipsoid(NormalizedEarth))
+invb2=1/(b*b)
+h_levels_max=maximum(hᵢ)
+h_levels_max²=h_levels_max*h_levels_max
+θ_max=maximum(θᵢ_effective)
+#ProfileCanvas.@profview_allocs
+
+hᵢ²=hᵢ.*hᵢ
+qt=ones(Float64,length(rays2[1:3]))
+nlevels=size(refractive,1)
+for i in 1 #eachindex(rays2[1])
+  isfirst=true
+  isdescending=true
+  isinside=true
+  count=0
+  while isinside
+    if isfirst
+      h²=_first_input(view(index,:,i),view(x0,:,i),view(rays2.origin,i),
+      view(rays2.direction,i),1.0,b,invb2,h_levels_max²,view(refractive,1,:),θᵢ_effective,θ_max)
+      isfirst=false
+      qt[i]=min(h²,qt[i])
+      θ_next=θᵢ_effective[index[2,i]+1]
+      θ_prev=θᵢ_effective[index[2,i]]
+
+      #@info "θ_next=$θ_next θ_prev=$θ_prev θ:$(x0[2,i])"
+    else
+     # @info "itr: $count x0: $(x0[:,i])"
+      next_level=isdescending-!isdescending
+      #precompute current n
+      n₀=refractive[index[:,i]...]
+      #precompute n of next radius
+      n_next_radius=refractive[index[1,i],index[2,i]+1]
+      #precompute n of next level
+      #@info " count:$count index=$(index[:,i]) next_level=$next_level x0=$(x0[:,i])"
+      n_next_level=refractive[index[1,i]+next_level,index[2,i]]
+      #precompute h² of next level
+      hlevel²=hᵢ²[index[1,i]+isdescending]
+      #precompute θ of next level
+      θ_next=θᵢ_effective[index[2,i]+1]
+      θ_prev=θᵢ_effective[index[2,i]]
+      #@info "θ_next=$θ_next θ_prev=$θ_prev hlevel²=$hlevel² isdescending:$isdescending"
+      #@info " t:$(x0[:,i]) θ:$(x0[2,i])"
+      #@info "hold=$(hᵢ²[index[1,i]]) hnew=$(hᵢ²[index[1,i]+isdescending])"
+
+      (h²,isdescending)=_next_input(view(index,:,i),view(x0,:,i),view(rays2.origin,i),
+      view(rays2.direction,i),n₀,hlevel²,
+      n_next_radius,n_next_level,
+      θ_prev,θ_next,
+      b,invb2,
+      isdescending)
+
+    #  @info "θ_next=$θ_next θ_prev=$θ_prev θ:$(x0[2,i])"
+
+      qt[i]=min(h²,qt[i])
+    end
+    @info "itr: $count x0: $(x0[:,i]), qt: $(sqrt(qt[i])*majoraxis_earth)km"
+    isinside= 1<=index[1,i]<nlevels
+    count+=1
+    isinside=count<10
+  end
+end
+
+using Makie,WGLMakie
+fig=Figure()
+ax=Axis(fig[1,1])
+_NN(t,b)=1/sqrt(cos(t)^2+b^2*sin(t)^2)
+tt=LinRange(0,2pi,1000)
+h1=hᵢ[1]
+h2=hᵢ[2]
+b
+lines!(ax,[Point2f((_NN(t,b)+h1)*cos(t),(b^2*_NN(t,b)+h1)*sin(t)) for t in tt])
+lines!(ax,[Point2f((_NN(t,b)+h2)*cos(t),(b^2*_NN(t,b)+h2)*sin(t)) for t in tt])
+direc1=θ_next |> x-> [cos(x),sin(x)/b] |> x-> x./hypot(x[1],x[2])
+lines!(ax,[Point2f(cos(θᵢ_effective[index[2,1]])+c*direc1[1],b*sin(θᵢ_effective[index[2,1]])+c*direc1[2]) for c in [0,h1]])
+
+direc2=θ_prev |> x-> [cos(x),sin(x)/b] |> x-> x./hypot(x[1],x[2])
+lines!(ax,[Point2f(cos(θᵢ_effective[index[2,1]+1])+c*direc2[1],b*sin(θᵢ_effective[index[2,1]+1])+c*direc2[2]) for c in [0,h1]])
+scatter!(ax,[Point2f(rays2.origin[1][1],rays2.origin[1][2])])
+scatter!(ax,[Point2f(rays3.origin[1][1],rays3.origin[1][2])])
+
+rays3=deepcopy(rays2)
+x1=deepcopy(x0)
+index1=deepcopy(index)
+isdescending=true
+next_level=isdescending-!isdescending
+
+n₀=refractive[index[:,1]...]
+
+n_next_radius=refractive[index[1,1],index[2,1]+1]
+
+n_next_level=refractive[index[1,1]+next_level,index[2,1]]
+      #precompute h² of next level
+hcurrent2=hᵢ²[index[1,1]]
+
+hlevel²=hᵢ²[index[1,1]+isdescending]
+      #precompute θ of next level
+θ_next=θᵢ_effective[index[2,1]+1]
+θ_prev=θᵢ_effective[index[2,1]]
+x1[2]
+
+(h²,isdescending)=_next_input(view(index1,:,1),view(x1,:,1),view(rays3.origin,1),
+      view(rays3.direction,1),n₀,hlevel²,
+      n_next_radius,n_next_level,
+      θ_prev,θ_next,
+      b,invb2,
+      isdescending)
 
 
 # Find intersection with outmost level
-function find_input_interception_new_lagrangian!(index,x,rays::Ar, # ray
   n₀;  #refractive index ray
   refractive_index_map=refractive, # map of refractive index
   h_levels=h_levels, # levels for i
@@ -351,7 +618,7 @@ function find_first_intersection_ellipse(ray::Ray2D, # ray
     (ii,jj),t_intersection) # return the intersection i
     end
 end
-
+#=
 @kwdef mutable struct Register{T}
   flag::Bool=false
   iteration::Int=0
@@ -400,3 +667,4 @@ _angleme(r1::Ray2D,r::Ray2D) = r1(0)-r(0) |> x->(x[2],x[1])  |> x-> atand(x...)
 
 
 Register()=Register{Float64}()
+=#

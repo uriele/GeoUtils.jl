@@ -33,9 +33,9 @@ function all_files_are_same(directory::String,file::String="in_lat.dat")::Bool
     flag = true
     x=readdir()
 
-    for i in 2:length(x)
-      file1=x[i]*"/"*file
-      file2=x[i-1]*"/"*file
+    for i in eachindex(x[1:end-1])
+      file1=x[i+1]*"/"*file
+      file2=x[i]*"/"*file
       files_are_same(file1,file2) || return false
     end
     return true
@@ -49,14 +49,16 @@ end
 Convert a file to an array of Float64 values, skipping the first `skip` lines.
 
 """
-function convert_to_array(Float64::Type{T},file::String;skip=15,sink::A=Array) where {T, A}
+function convert_to_array(::Type{T},file::String;skip=15,sink::A=Array) where {T, A}
   open(file, "r") do f
-    data=readlines(f)[skip+1:end] |>
+    readlines(f)[skip+1:end] |>
     x-> join(x," ") |> x-> String.(split(x)) |> x-> parse.(T,x) |> sink
   end
 end
 
 convert_to_array(file::String;kwargs...)=convert_to_array(Float64,file;kwargs...)
+
+
 
 
 abstract type RealNumber end
