@@ -238,12 +238,6 @@ end
 normalize_datum!(orbit)
 
 
-@benchmark create_bundle_rays(Float64,$orbit)
-@benchmark begin
-  $rr2=StructArray{Ray2D{Float64}}(undef,size($orbit));
-  rays_from_orbit!($rr2,$orbit)
-end
-
 rr2=StructArray{Ray2D{Float64}}(undef,length(orbit));
 rays_from_orbit!(rr2,orbit)
 
@@ -255,13 +249,17 @@ ii=1
 hᵢ_max=maximum(hᵢ)
 hᵢ_max²=hᵢ_max*hᵢ_max
 θmin=atan(rr2.origin[ii][2],rr2.origin[ii][1])
-θmax=θmin+2pi
 
-for ii in eachindex(rr2)
-  θmin=atan(rr2[ii].origin[2],rr2[ii].origin[1])
-  θmax=θmin+2pi
-  x0[2,ii]=θmin
+#for ii in 1:1 #eachindex(rr2)
+
+
+#  θmin=x0[2,ii]+0.2;#θminatan(rr2[ii].origin[2],rr2[ii].origin[1])
+  θmax=θmin+1/180*pi
+  #@info "i: $ii"
+x0[2,ii]
   GeoUtils.optimization_augmented_lagrangian!(view(x0,:,ii),rr2.origin[ii],rr2.direction[ii],reduced_minoraxis_earth,hᵢ_max²,θmin,θmax,view(slack,:,ii));
+  θmin
+  #@info "=============="
   rr2.origin[ii]=rr2.origin[ii]+rr2.direction[ii]*x0[1,ii]
 end
 
@@ -274,15 +272,23 @@ end
 
 v=rr2.origin-perp.origin
 hs=[hypot(x[1],x[2]) for x in v]
+hs[1]-hᵢ_max
+diff([extrema(hs)...])
 
-extrema(hs)
 
 
 fig=Figure()
 ax=Axis(fig[1,1])
-scatter!(ax,rr2.origin[:])
+scatter!(ax,rr2.origin)
+scatter!(ax,perp.origin)
+scatter!(ax,Point2(orbit.w[1],orbit.z[1]))
 
 
+[]
+
+(v[1]⋅[sin(x0[2,1])/reduced_minoraxis_earth;-cos(x0[2,1])])
+
+x0
 
 
 # Find intersection with outmost level

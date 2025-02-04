@@ -1,5 +1,137 @@
 using Symbolics
 using LinearAlgebra
+
+@variables s1 s2 s3 lambda1 lambda2 lambda3 rho
+@variables x θ θ₁ θ₂
+@variables ∇xx ∇xy ∇yx ∇yy ∂x ∂y
+h0=x-s1
+g1=θ-θ₁-s2
+g2=θ₂-θ-s3
+p=1//2*rho*(h0^2+g1^2+g2^2)+lambda1*h0+lambda2*g1+lambda3*g2
+Dx=Differential(x)
+Ds1=Differential(s1)
+Dθ=Differential(θ)
+Ds2=Differential(s2)
+Ds3=Differential(s3)
+Dx(Dx(p)) |> expand_derivatives |> simplify
+Ds1(p) |> expand_derivatives |> simplify
+Dθ(p) |> expand_derivatives |> simplify
+Ds2(p) |> expand_derivatives |> simplify
+Ds3(p) |> expand_derivatives |> simplify
+Ds3(Dθ(p)) |> expand_derivatives |> simplify
+
+
+@variables Dist ABD ABT ABP TD T²
+
+
+f_t=4*Dist*(ABD)
+f_θ=4*Dist*(ABT)
+f_tt=4*Dist+8*(ABD)^2
+f_θθ=4*Dist*(T²+ABP)+8*(ABT)^2
+f_tθ=8*(ABT)*(ABD)+4(TD)
+
+D=f_tt*f_θθ-f_tθ^2 |> expand |> simplify
+
+@info "pt: $(N1=f_t*f_θθ-f_θ*f_tθ |> expand |> simplify)"
+@info "pθ: $(N2=f_θ*f_tt-f_t*f_tθ |> expand |> simplify)"
+@info "ps0: "
+
+N1/D |> expand |> simplify
+
+Ds1(Ds1(p)) |> expand_derivatives |> simplify
+Ds1(Dx(p)) |> expand_derivatives |> simplify
+Ds2(Dθ(p)) |> expand_derivatives |> simplify
+Ds3(Dθ(p)) |> expand_derivatives |> simplify
+
+[Dx(Dx(p)) Dx(Dθ(p)) Dx(Ds1(p)) Dx(Ds2(p)) Dx(Ds3(p));
+Dθ(Dx(p)) Dθ(Dθ(p)) Dθ(Ds1(p)) Dθ(Ds2(p)) Dθ(Ds3(p));
+Ds1(Dx(p)) Ds1(Dθ(p)) Ds1(Ds1(p)) Ds1(Ds2(p)) Ds1(Ds3(p));
+Ds2(Dx(p)) Ds2(Dθ(p)) Ds2(Ds1(p)) Ds2(Ds2(p)) Ds2(Ds3(p));
+Ds3(Dx(p)) Ds3(Dθ(p)) Ds3(Ds1(p)) Ds3(Ds2(p)) Ds3(Ds3(p))] |>
+ x->@.expand_derivatives(x) |> x-> @. simplify(x)
+
+
+
+ DP=[rho           0  -rho     0    0
+ 0  2rho     0  -rho  rho
+-rho           0   rho     0    0
+ 0        -rho     0   rho    0
+ 0         rho     0     0  rho]
+
+DB=[∇xx ∇xy 0 0 0;
+ ∇xy ∇yy 0 0 0;
+  0 0 0 0 0;
+  0 0 0 0 0;
+  0 0 0 0 0]
+
+Dtot=DP+DB
+iDtot=inv(Dtot) |> x-> @. expand(x) |> x-> @. simplify(x)
+uuu=iDtot
+uuu[1,:]
+uuu[2,:]
+uuu[3,:]
+uuu[4,:]
+uuu[5,:]
+
+
+
+dF=[∂x;∂y;0;0;0]
+dP=expand_derivatives.([Dx(p);Dθ(p);Ds1(p);Ds2(p);Ds3(p)] ) |>
+fx-> @. substitute(fx,lambda1=>λ₁+ρh - rho*(-s1 + x)) |>
+x-> @. substitute(x,lambda2=> λ₂ +ρgₗ-rho*(θ-θ₁-s2)) |> x-> @. expand(x) |>
+x-> @. substitute(x,lambda3=> λ₃ +ρgᵤ-rho*(θ₂-θ-s3)) |> x-> @. expand(x) |> x-> @. simplify(x)
+
+
+@variables λ₁ λ₂ λ₃ ρh ρgₗ ρgᵤ
+
+dTot=dF+dP |>
+fx-> @. substitute(fx,lambda1=>λ₁+ρh - rho*(-s1 + x)) |>
+x-> @. substitute(x,lambda2=> λ₂ +ρgₗ-rho*(θ-θ₁-s2)) |> x-> @. expand(x) |>
+x-> @. substitute(x,lambda3=> λ₃ +ρgᵤ-rho*(θ₂-θ-s3)) |> x-> @. expand(x) |> x-> @. simplify(x)
+
+pp=iDtot*dTot
+
+pp[1] *(∇xx*∇yy - (∇xy^2)) |> expand |> simplify
+
+pp[2] *(∇xx*∇yy - (∇xy^2)) |> expand |> simplify
+
+pp[3] |> x-> expand(x) |> x-> simplify(x)
+
+pp[4]  |> expand |> simplify
+
+
+pp[5]+pp[4]  |> expand |> simplify
+
+
+AA=[∇yy -∇xy; -∇xy ∇xx]
+BB=[∇yy -∇xy; -∇xy ∇xx; ∇xy -∇xx]
+BBᵀ=transpose(BB)
+
+@variables ρ
+
+C0=[∇yy -∇xy ∇xy; -∇xy ∇xx -∇xx; ∇xy -∇xx ∇xx]
+C1=1/ρ.*[1 0 0;0 1 0;0 0 1]
+A
+dTot
+Symbolics.coeff.(AA*dTot[1:2]+BBᵀ*dTot[3:end],∇xx)
+
+C1
+C1*dTot[3:end]
+
+
+Symbolics.coeff.(BB*dTot[1:2]+C0*dTot[3:end],∇xy)*∇xy+
+Symbolics.coeff.(BB*dTot[1:2]+C0*dTot[3:end],∇xx)*∇xx+
+Symbolics.coeff.(BB*dTot[1:2]+C0*dTot[3:end],∇yy)*∇yy+
+C1*dTot[3:end]
+
+Symbolics.coeff.(AA*dTot[1:2]+BBᵀ*dTot[3:end],∇xy)*∇xy+
+Symbolics.coeff.(AA*dTot[1:2]+BBᵀ*dTot[3:end],∇xx)*∇xx+
+Symbolics.coeff.(AA*dTot[1:2]+BBᵀ*dTot[3:end],∇yy)*∇yy
+
+
+
+
+A
 @variables ori_x ori_y dire_x dire_y  theta hh2 bb  t1 ang1 dist
 @variables AB[2] dist2 Tₑ² Tₑ[2] pp[2]  dot_AB_P dot_AB_Tₑ dot_AB_D dot_D_Tₑ dot_D_P
 @variables N1 N2
@@ -23,7 +155,13 @@ fun2
 
 Dt1=Differential(t1)
 Dtheta=Differential(theta)
-fun2
+
+
+@variables ∇xx ∇xy ∇yx ∇yy ∂x ∂y
+
+inv([∇xx ∇xy; ∇yx ∇yy])*[∂x;∂y]
+
+
 _D_t=expand_derivatives(Dt1(fun2))
 
 D_t= _D_t |> x-> substitute(x, [ori_x=> AB[1]-(dire_x*t1-cos(theta)), ori_y=> AB[2]-(dire_y*t1-bb*sin(theta)),-hh2=>dist2-AB[1]^2-AB[2]^2]) |> simplify
@@ -56,6 +194,18 @@ x-> substitute(x,2*(2dire_x*sin(theta) - 2bb*dire_y*cos(theta))*dist2=>4*dot_D_T
 
 @info "D_theta" D_theta
 @info "D_t" D_t
+
+_D1_t=expand_derivatives(Dt1(fun))
+_D1_theta=expand_derivatives(Dtheta(fun))
+
+D1_t= _D1_t |> x-> substitute(x, [ori_x=> AB[1]-(dire_x*t1-cos(theta)), ori_y=> AB[2]-(dire_y*t1-bb*sin(theta)),-hh2=>dist2-AB[1]^2-AB[2]^2]) |> simplify
+D1_theta=_D1_theta |> x-> substitute(x, [ori_x=> AB[1]-(dire_x*t1-cos(theta)), ori_y=> AB[2]-(dire_y*t1-bb*sin(theta)),-hh2=>dist2-AB[1]^2-AB[2]^2]) |> simplify
+
+@info "D1_t" D1_t
+@info "D1_theta" D1_theta
+D1_tt=expand_derivatives(Dt1(_D1_t)) |> x-> substitute(x, [ori_x=> AB[1]-(dire_x*t1-cos(theta)), ori_y=> AB[2]-(dire_y*t1-bb*sin(theta)),-hh2=>dist2-AB[1]^2-AB[2]^2,dire_x^2=>1-dire_y^2]) |> simplify
+D1_theta_theta=expand_derivatives(Dtheta(_D1_theta)) |> x-> substitute(x, [ori_x=> AB[1]-(dire_x*t1-cos(theta)), ori_y=> AB[2]-(dire_y*t1-bb*sin(theta)),-hh2=>dist2-AB[1]^2-AB[2]^2]) |> simplify
+D1_t_theta=expand_derivatives(Dtheta(_D1_t)) |> x-> substitute(x, [ori_x=> AB[1]-(dire_x*t1-cos(theta)), ori_y=> AB[2]-(dire_y*t1-bb*sin(theta)),-hh2=>dist2-AB[1]^2-AB[2]^2]) |> simplify
 
 D_theta2*D_t2  |>expand
 -D_t_theta^2 |> expand

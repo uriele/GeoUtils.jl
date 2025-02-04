@@ -183,8 +183,16 @@ using Makie,WGLMakie
 minoraxis_earth=minoraxis(ellipsoid(NormalizedEarth))
 figure=Figure()
 
-ax=Axis(figure[1,1][1,1],xlabel="x",ylabel="y")
-scatter!(ax,rays.origin[ix])
+__origin=Point2f[]
+__direction=Point2f[]
+ push!(__origin,Point2f(0.15714940256200277, 0.9950807316192851))
+
+ push!(__direction, Point2f(-0.9993454221649347, 0.03617633477825994))
+ push!(__origin,Point2f(0.13183762146621938, 0.9959970188673634))
+ push!(__direction, Point2f(-0.9993454219543801, 0.036176340594677135))
+
+ ax=Axis(figure[1,1][1,1],xlabel="x",ylabel="y")
+scatter!(ax,__origin)
 scatter!(ax,rays1.origin[ix],color=:red)
 scatter!(ax,rays2.origin[ix],color=:blue)
 lines!(ax,[Point2f(r) for r in [rays.origin[ix],rays1.origin[ix]]])
