@@ -954,11 +954,11 @@ function optimization_augmented_lagrangian!(x::AV,r_origin::V2,r_direction::V2,b
     (s1,s2,s3)=Vec3(slack[1],slack[2],slack[3])
     (t,θ)=Vec2(x[1],x[2])
     # update Lagrange multipliers
-    (λ1,λ2,λ3)=Vec3(λ1+rho*_ht_0(t,s1),λ2+rho*_gθ_lower(θ,s2,θmin),λ3+rho*_gθ_lower(θ,s3,θmax))
+    (λ1,λ2,λ3)=Vec3(λ1+rho*_ht_0(t,s1),λ2+rho*_gθ_lower(θ,s2,θmin),λ3+rho*_gθ_upper(θ,s3,θmax))
     @debug "k-th: $kout"
     @debug "rho: $rho"
     @debug "λ1: $λ1 λ2: $λ2 λ3: $λ3"
-    @debug "s1: $s1 s2: $s2 s3: $s3"
+    @info "s1: $s1 s2: $s2 s3: $s3"
     h0=_ht_0(t,s1)
     g0=_gθ_lower(θ,s2,θmin)
     g1=_gθ_upper(θ,s3,θmax)
@@ -1177,6 +1177,9 @@ function ray_constrained_lagrangian!(
   ds1= N1- ht_0    -λ1*inv_p_barrier
   ds2= N2- gθ_lower-λ2*inv_p_barrier
   ds3=-N2- gθ_upper-λ3*inv_p_barrier
+
+  @info "s1: $(s1-ds1) s2: $(s2-ds2) s3: $(s3-ds3)"
+
 
   # Projection into the positive orthant
   @debug "s1: $s1 s2: $s2 s3: $s3"
