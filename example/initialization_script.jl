@@ -176,21 +176,6 @@ x-> [parse(Float64,y) for y in x]./majoraxis_earth;
 # Generate discretized atmosphere using the knots
 pressure,temperature,refractive=discretize_atmosphere(atmosphere,hᵢ,θᵢ; model=MODEL[],interpolation_pressure=INTERPOLATION[]);
 
-#= No Discernable Advantage here #
-pressure=SemiCircularArray{Float64}(undef, length(hᵢ)-1, length(θᵢ)) ;
-temperature=SemiCircularArray{Float64}(undef, length(hᵢ)-1, length(θᵢ));
-refractive=SemiCircularArray{Float64}(undef, length(hᵢ)-1, length(θᵢ));
-@benchmark GeoUtils._discretize_lowallocation_new!(
-  view($pressure,:,:),view($temperature,:,:),view($refractive,:,:),
-  view($atmosphere.pressure,:,:),
-  view($atmosphere.temperature,:,:),
-  view($atmosphere.h,:,1),
-  view($atmosphere.θ,1,:),
-  view($hᵢ,:),view($θᵢ,:);
-  model=MODEL[],
-  interpolation_pressure=INTERPOLATION[])
-=#
-
 
 ############################################
 # get coordinates in LLA and ECEF
@@ -232,18 +217,19 @@ transposed_orbit=read_orbit("./data_atm/INP_FILES/orbit.dat")
 orbit=StructArray{SatOrbit{Float64},1}(undef,size(transposed_orbit,2),size(transposed_orbit,1))
 
 for (o1,to1) in zip(StructArrays.components(orbit),StructArrays.components(transposed_orbit))
-  @inbounds o1.=transpose(to1)
+  @inbounds o1.=transpose(to1);
 end
 
-normalize_datum!(orbit)
+normalize_datum!(orbit);
 
 
 rr2=StructArray{Ray2D{Float64}}(undef,length(orbit));
 rays_from_orbit!(rr2,orbit)
 
 
-x0=fill(0.0,(2,length(rr2)))
-slack=fill(0.0,(3,length(rr2)))
+x0=fill(0.0,(2,length(rr2)));
+g= similar(x0)
+slack=fill(0.0,(3,length(rr2)));
 ii=1
 
 hᵢ_max=maximum(hᵢ)
@@ -254,10 +240,13 @@ hᵢ_max²=hᵢ_max*hᵢ_max
 
 
 #  θmin=x0[2,ii]+0.2;#θminatan(rr2[ii].origin[2],rr2[ii].origin[1])
-  θmax=θmin+1/180*pi
+  θmax=θmin+10/180*pi
   #@info "i: $ii"
-x0[2,ii]
-  GeoUtils.optimization_augmented_lagrangian!(view(x0,:,ii),rr2.origin[ii],rr2.direction[ii],reduced_minoraxis_earth,hᵢ_max²,θmin,θmax,view(slack,:,ii));
+  x0[2,ii]
+
+
+  GeoUtils.optimization_augmented_lagrangian!(view(g,:,ii),view(x0,:,ii),rr2.origin[ii],rr2.direction[ii],reduced_minoraxis_earth,hᵢ_max²,θmin,θmax,view(slack,:,ii));
+  slack
   θmin
   #@info "=============="
   rr2.origin[ii]=rr2.origin[ii]+rr2.direction[ii]*x0[1,ii]

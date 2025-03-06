@@ -25,7 +25,7 @@ module GeoUtils
   using Unitful:Quantity,°
   using Unitful:𝐋
   using CoordRefSystems:ellipfromab
-  using LinearAlgebra: ⋅
+  using LinearAlgebra: ⋅,norm
   using Polyester: @batch  # for batch processing
   #using Mmap: mmap
   ####

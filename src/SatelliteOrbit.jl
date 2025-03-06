@@ -927,12 +927,10 @@ end
 
 
 # Optimization internal function for t>0 and θmin<θ<θmax
-@inline _ht_0(t,s1)=(t-s1)
-@inline _gθ_lower(θ,s2,lower)=(θ-s2-lower)
-@inline _gθ_upper(θ,s3,upper)=(upper-s3-θ)
+@inline _Δc(higher::T,lower::T) where T=higher-lower
 
 
-function optimization_augmented_lagrangian!(x::AV,r_origin::V2,r_direction::V2,b::T,h²::T,θmin::T,θmax::T,slack::AS;
+function optimization_augmented_lagrangian!(g::AV,x::AV,r_origin::V2,r_direction::V2,b::T,h²::T,θmin::T,θmax::T,slack::AS;
   rho=T(1.0),gamma=T(1.5),kmax_out::Int=10,kmax_in::Int=10)::T where {AV<:AbstractArray{T},AS<:AbstractArray{T},V2<:Vec2{T}} where T
 
   func=T(0.0)
@@ -946,174 +944,53 @@ function optimization_augmented_lagrangian!(x::AV,r_origin::V2,r_direction::V2,b
 
   slack[1]=T(0.0)
   x[1]=T(0.0)
-
+#=
   while kout<kmax_out
-    func,_h²=inner_optimization!(func,x,r_origin,r_direction,b,h²,θmin,θmax,rho,λ1,λ2,λ3,slack;kmax=kmax_in)
-    rho*=gamma
+=#
+    func,_h²=inner_optimization!(g,x,r_origin,r_direction,b,h²,θmin,θmax,rho,λ1,λ2,λ3,slack;kmax=kmax_in)
     # not necessary but for commodity
+    #=
     (s1,s2,s3)=Vec3(slack[1],slack[2],slack[3])
     (t,θ)=Vec2(x[1],x[2])
+    h1=_Δc(t,T(0))-s1
+    h2=_Δc(θ,θmin)-s2
+    h3=_Δc(θmax,θ)-s3
     # update Lagrange multipliers
-    (λ1,λ2,λ3)=Vec3(λ1+rho*_ht_0(t,s1),λ2+rho*_gθ_lower(θ,s2,θmin),λ3+rho*_gθ_upper(θ,s3,θmax))
-    @debug "k-th: $kout"
-    @debug "rho: $rho"
-    @debug "λ1: $λ1 λ2: $λ2 λ3: $λ3"
-    @info "s1: $s1 s2: $s2 s3: $s3"
-    h0=_ht_0(t,s1)
-    g0=_gθ_lower(θ,s2,θmin)
-    g1=_gθ_upper(θ,s3,θmax)
-    h02=h0*h0
-    g02=g0*g0
-    g12=g1*g1
-    @info "h²: $h02, g0: $g02, g1: $g12"
-    penalty=rho/2*(h02+g02+g12)+λ1*h0+λ2*g0+λ3*g1
-    @info "penality: $penalty"
-    @info "rho part: $(rho/2*(h02+g02+g12))"
-    @info "λ1 $(λ1) part: $(λ1*h0)"
-    @info "λ2 $(λ2) part: $(λ2*g0)"
-    @info "λ3 $(λ3) part: $(λ3*g1)"
-    if (h02<atol(T) && g02<=atol(T) && g12<=atol(T))
+    (λ1,λ2,λ3)=Vec3(λ1-h1*rho,λ2-h2*rho,λ3-h3*rho)
+    rho*=gamma
+    if norm((h1,h2,h3))<atol(T)
       break
     end
-
     kout+=1
-
   end
+  =#
   return _h²
 end
 
 
-function inner_optimization!(func_old::T,x::AV,r_origin::V2,r_direction::V2,b::T,h²::T,θmin::T,θmax::T,rho::T,λ1::T,λ2::T,λ3::T,slack::AS;kmax::Int=10)::Tuple{T,T} where {AV<:AbstractVector{T},AS<:AbstractVector{T},V2<:Vec2{T}} where T
+function inner_optimization!(g::AV,x::AV,r_origin::V2,r_direction::V2,b::T,h²::T,θmin::T,θmax::T,rho::T,λ1::T,λ2::T,λ3::T,slack::AS;kmax::Int=30)::Tuple{T,T} where {AV<:AbstractVector{T},AS<:AbstractVector{T},V2<:Vec2{T}} where T
   k=0
   _h²=999.0
   func=0.0
-  while true
-    func,_h²=ray_constrained_lagrangian!(x,r_origin,r_direction,b,h²,θmin,θmax,rho,
+  k=0
+  while k<=kmax
+    func,_h²=ray_constrained_lagrangian!(g,x,r_origin,r_direction,b,h²,θmin,θmax,rho,
     λ1,λ2,λ3,
     slack)
-    err=abs(func-func_old)
-    func_old=func
-    if err<atol(T)
+
+    if norm(g)<atol(T)
+      @info k
+     s @info norm(g)
       break
     end
+    k+=1
   end
   return func,_h²
 end
 
 
-#==
-function ray_constrained_lagrangian!(
-  x::AV,r_origin::V2,
-  r_direction::V2,b::T,h²::T,θmin::T,θmax::T,p_barrier::T,
-  λ1::T,λ2::T,λ3::T,
-  slack::AS)::Tuple{T,T}  where {
-    AV<:AbstractArray{T},
-    AS<:AbstractArray{T},
-    V2<:Vec2{T}
-  } where T
-
-  inv_p_barrier=1/p_barrier
-  cosθ=cos(x[2])
-  sinθ=sin(x[2])
-  sin2θ=sin(2*x[2])
-  cos2θ=cos(2*x[2])
-  bsinθ=b*sinθ
-  bcosθ=b*cosθ
-  b²=b*b
-
-  X=r_origin[1] + x[1]*r_direction[1]-cosθ
-  Y=r_origin[2] + x[1]*r_direction[2]-bsinθ
-
-  AB² = X*X + Y*Y
-  distance=AB²-h²
-  distance² =distance*distance
-
-
-  AB_Dᵣ = X*r_direction[1]+Y*r_direction[2]
-  AB_Tₑ = X*sinθ-Y*bcosθ
-  AB_Tₑ² = AB_Tₑ*AB_Tₑ
-  AB_P  = X*cosθ+Y*bsinθ
-  Tₑ² = bcosθ*bcosθ+sinθ*sinθ
-  Dᵣ_Tₑ = r_direction[1]*sinθ-r_direction[2]*bcosθ
-  Dᵣ_P  = r_direction[1]*cosθ+r_direction[2]*bsinθ
-  four_dist=4*distance
-
-  one_minus_b²=1-b²
-
-  dot_ABP_minus_C1_cos2θ=AB_P- one_minus_b²*cos2θ
-
-  #  ∂f1∂t=0#2*AB_Dᵣ
-  #  ∂f1∂θ=2*AB_Tₑ
-
-  #  ∇²f1_tt=0
-  #  ∇²f1_θθ=2*(AB_P+Tₑ²)
-  #  ∇²f1_tθ=0#2*Dᵣ_Tₑ
-
-
-  ∂f∂t=four_dist*AB_Dᵣ#+∂f1∂t#+2*Dᵣ_Tₑ*AB_Tₑ                       #perpendicular condition derivative ∂f1/∂t
-  ∂f∂θ=four_dist*AB_Tₑ+2*(AB_P-one_minus_b²*cos2θ)*AB_Tₑ  #perpendicular condition derivative ∂f1/∂θ
-
-  half_∇²f₁_θθ= dot_ABP_minus_C1_cos2θ*dot_ABP_minus_C1_cos2θ-(AB_Tₑ - one_minus_b²*sin2θ)*AB_Tₑ
-
-  ∇²f_tt= four_dist+8*(AB_Dᵣ*AB_Dᵣ)#+∇²f1_tt#+2*Dᵣ_Tₑ*Dᵣ_Tₑ            # distance condition derivative ∂²f/∂t²
-
-  ∇²f_θθ= (AB_P+Tₑ²)*four_dist+ 8*(AB_Tₑ²)+half_∇²f₁_θθ*2
-
-  ∇²f_tθ= (Dᵣ_Tₑ)*four_dist+8*AB_Dᵣ*AB_Tₑ#+∇²f1_tθ#+2*dot_ABP_minus_C1_cos2θ*Dᵣ_Tₑ+AB_Tₑ*Dᵣ_P
-
-
-
-
-  # C1 -> (∇²f_tt*∇²f_θθ - (∇²f_tθ^2))
-  # N1 -> ∂f∂t*∇²f_θθ-∂f∂θ*∇²f_tθ
-  # N2 -> ∂f∂θ*∇²f_tt-∂f∂t*∇²f_tθ
-  C1 = ∇²f_tt*∇²f_θθ - (∇²f_tθ*∇²f_tθ)
-  C1 += (C1<atol(T))*atol(T)
-  N1= (∂f∂t*∇²f_θθ-∂f∂θ*∇²f_tθ)/C1
-  N2= (∂f∂θ*∇²f_tt-∂f∂t*∇²f_tθ)/C1
-
-  x[1]-=N1
-  x[2]-=N2
-
-  s1=slack[1]
-  s2=slack[2]
-  s3=slack[3]
-
-  ht_0    =_ht_0(x[1],s1)
-  gθ_lower=_gθ_lower(x[2],s2,θmin)
-  gθ_upper=_gθ_upper(x[2],s3,θmax)
-
-  ds1= N1-ht_0    -λ1*inv_p_barrier
-  ds2= N2-gθ_lower-λ2*inv_p_barrier+slack[2]
-  ds3=-N2-gθ_upper-λ3*inv_p_barrier+slack[3]
-
-  # Projection into the positive orthant
-  slack[1]=max(s1-ds1,0)
-  slack[2]=max(s2-ds2,0)
-  slack[3]=max(s3-ds3,0)
-
-  # Recalculate the Lagrange multipliers
-  ht_0=_ht_0(x[1],slack[1])
-  gθ_lower=_gθ_lower(x[2],slack[2],θmin)
-  gθ_upper=_gθ_upper(x[2],slack[3],θmax)
-
-
-  penalty=p_barrier/2*(ht_0*ht_0+gθ_lower*gθ_lower+gθ_upper*gθ_upper)+λ1*ht_0+λ2*gθ_lower+λ3 *gθ_upper
-
-  @debug "penality: $penalty"
-  # Compute new function
-  fvalue=distance²+ # distance condtion f
-  AB_Tₑ²+ penalty
-
-  return (fvalue  ,h²+(distance²>atol(T))*distance²)
-
-end
-==#
-
-
-
-
-function ray_constrained_lagrangian!(
+#=
+function ray_constrained_lagrangian!(g::AV,
   x::AV,r_origin::V2,
   r_direction::V2,b::T,h²::T,θmin::T,θmax::T,p_barrier::T,
   λ1::T,λ2::T,λ3::T,
@@ -1170,36 +1047,132 @@ function ray_constrained_lagrangian!(
   s2=slack[2]
   s3=slack[3]
 
-  ht_0    =_ht_0(x[1],s1)
-  gθ_lower=_gθ_lower(x[2],s2,θmin)
-  gθ_upper=_gθ_upper(x[2],s3,θmax)
 
-  ds1= N1- ht_0    -λ1*inv_p_barrier
-  ds2= N2- gθ_lower-λ2*inv_p_barrier
-  ds3=-N2- gθ_upper-λ3*inv_p_barrier
+  c1=_Δc(x[1],T(0))
+  c2=_Δc(x[2],θmin)
+  c3=_Δc(θmax,x[2])
 
-  @info "s1: $(s1-ds1) s2: $(s2-ds2) s3: $(s3-ds3)"
+  h1 = c1-s1
+  h2 = c2-s2
+  h3 = c3-s3
 
+  g[3]=+λ1-p_barrier*h1
+  g[4]=+λ2-p_barrier*h2
+  g[5]=+λ3-p_barrier*h3
+
+  g[1]=∂f∂t-g[3]
+  g[2]=∂f∂θ-g[4]
+  g[3]=∂f∂θ+g[5]
+
+  ds1=+N1+g[3]*inv_p_barrier
+  ds2=+N2+g[4]*inv_p_barrier
+  ds3=-N2+g[5]*inv_p_barrier
 
   # Projection into the positive orthant
-  @debug "s1: $s1 s2: $s2 s3: $s3"
+  @info "N1: $N1 N2: $N2"
+  @info "λ1: $λ1 λ2: $λ2 λ3: $λ3"
+  @info "ds1: $ds1 ds2: $ds2 ds3: $ds3"
+  @info "g3: $(g[3]) g4: $(g[4]) g5: $(g[5])"
+  @info "s1: $s1 s2: $s2 s3: $s3"
+  @info "c1: $c1 c2: $c2 c3: $c3"
+  @info "h1: $h1 h2: $h2 h3: $h3"
+  #= Try explicitly impose it
   slack[1]=max(s1-ds1,0)
   slack[2]=max(s2-ds2,0)
   slack[3]=max(s3-ds3,0)
-  @debug "slack[1]: $(slack[1]) slack[2]: $(slack[2]) slack[3]: $(slack[3])"
 
+  =#
   # Recalculate the Lagrange multipliers
-  ht_0=_ht_0(x[1],slack[1])
-  gθ_lower=_gθ_lower(x[2],slack[2],θmin)
-  gθ_upper=_gθ_upper(x[2],slack[3],θmax)
+  h1=_Δc(x[1],T(0))-slack[1]
+  h2=_Δc(x[2],θmin)-slack[2]
+  h3=_Δc(θmax,x[2])-slack[3]
 
 
-  penalty=p_barrier/2*(ht_0*ht_0+gθ_lower*gθ_lower+gθ_upper*gθ_upper)+λ1*ht_0+λ2*gθ_lower+λ3 *gθ_upper
+  penalty=p_barrier/2*(h1*h1+h2*h2+h3*h3)-λ1*h1-λ2*h2-λ3*h3
 
-  @debug "penality: $penalty"
+  @info "penality: $penalty θmin: $θmin θmax: $θmax"
   # Compute new function
   fvalue=distance²+ penalty
 
+
+  @info "g: $g"
+  @info "x: $x s: $slack"
   return (fvalue  ,h²+(distance²>atol(T))*distance²)
+
+end
+=#
+
+
+
+
+function ray_constrained_lagrangian!(g::AV,
+  x::AV,r_origin::V2,
+  r_direction::V2,b::T,h²::T,θmin::T,θmax::T,p_barrier::T,
+  λ1::T,λ2::T,λ3::T,
+  slack::AS)::Tuple{T,T}  where {
+    AV<:AbstractArray{T},
+    AS<:AbstractArray{T},
+    V2<:Vec2{T}
+  } where T
+
+  inv_p_barrier=1/p_barrier
+  cosθ=cos(x[2])
+  sinθ=sin(x[2])
+
+  bsinθ=b*sinθ
+  bcosθ=b*cosθ
+  b²=b*b
+
+  X=r_origin[1] + x[1]*r_direction[1]-cosθ
+  Y=r_origin[2] + x[1]*r_direction[2]-bsinθ
+
+  AB² = X*X + Y*Y
+  distance=AB²-h²
+  distance² =distance*distance
+
+
+  AB_Dᵣ = X*r_direction[1]+Y*r_direction[2]
+  AB_Tₑ = X*sinθ-Y*bcosθ
+  AB_Tₑ² = AB_Tₑ*AB_Tₑ
+  AB_P  = X*cosθ+Y*bsinθ
+  Tₑ² = bcosθ*bcosθ+sinθ*sinθ
+  Dᵣ_Tₑ = r_direction[1]*sinθ-r_direction[2]*bcosθ
+  four_dist=4*distance
+
+
+  ∂f∂t=four_dist*AB_Dᵣ
+  ∂f∂θ=four_dist*AB_Tₑ
+
+  ∇²f_tt= four_dist+8*(AB_Dᵣ*AB_Dᵣ)
+
+  ∇²f_θθ= (AB_P+Tₑ²)*four_dist+ 8*(AB_Tₑ²)
+
+  ∇²f_tθ= (Dᵣ_Tₑ)*four_dist+8*AB_Dᵣ*AB_Tₑ
+
+
+  Denom = ∇²f_tt*∇²f_θθ - (∇²f_tθ*∇²f_tθ)
+
+  #Denom = (abs(Denom)<atol(T))*atol(T)+(abs(Denom)<atol(T))*Denom
+  N1= (∂f∂t*∇²f_θθ-∂f∂θ*∇²f_tθ)/Denom
+  N2= (∂f∂θ*∇²f_tt-∂f∂t*∇²f_tθ)/Denom
+
+  @info "Denom: $Denom N1: $N1 N2: $N2"
+  x[2]-=N2
+  x[1]-=N1
+
+  g[1]=∂f∂t
+  g[2]=∂f∂θ
+
+#=
+  if θmin<θnew<θmax
+    x[1]-=N1
+    x[2]=θnew
+  else
+    x[1]-=∂f∂t/∇²f_tt
+    x[2]=min(max(θmin,θnew),θmax)
+    g[2]=0.0
+  end
+=#
+  return (distance²  ,h²+(distance²>atol(T))*distance²)
 
 end
