@@ -7,6 +7,17 @@ using MacroTools
 using Unitful
 #using Unrolled
 using BenchmarkTools #to benchmark
+
+
+const DEFAULT_MINORAXIS=0.9966471893352525
+const DEFAULT_MINORAXIS²=DEFAULT_MINORAXIS^2
+const DEFAULT_E²=1-DEFAULT_MINORAXIS²
+
+const MINORAXIS_F16=Float16(DEFAULT_MINORAXIS)
+const MINORAXIS_F32=Float32(DEFAULT_MINORAXIS)
+const MINORAXIS_F64=Float64(DEFAULT_MINORAXIS)
+
+
 include("../generated_fast_code/global_constants.jl")
 include("../generated_fast_code/quoted_functions.jl")
 
