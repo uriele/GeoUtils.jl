@@ -13,13 +13,21 @@ const DEFAULT_MINORAXIS=0.9966471893352525
 const DEFAULT_MINORAXIS²=DEFAULT_MINORAXIS^2
 const DEFAULT_E²=1-DEFAULT_MINORAXIS²
 
-const MINORAXIS_F16=Float16(DEFAULT_MINORAXIS)
-const MINORAXIS_F32=Float32(DEFAULT_MINORAXIS)
-const MINORAXIS_F64=Float64(DEFAULT_MINORAXIS)
+const MINORAXIS_F16=Ref{Float16}(DEFAULT_MINORAXIS)
+const MINORAXIS_F32=Ref{Float32}(DEFAULT_MINORAXIS)
+const MINORAXIS_F64=Ref{Float64}(DEFAULT_MINORAXIS)
+
+const MINORAXIS²_F16=Ref{Float16}(DEFAULT_MINORAXIS²)
+const MINORAXIS²_F32={Float32}(DEFAULT_MINORAXIS²)
+const MINORAXIS²_F64={Float64}(DEFAULT_MINORAXIS²)
+
+const E²_F16=Ref{Float16}(DEFAULT_E²)
+const E²_F32=Ref{Float32}(DEFAULT_E²)
+const E²_F64=Ref{Float64}(DEFAULT_E²)
 
 
-include("../generated_fast_code/global_constants.jl")
-include("../generated_fast_code/quoted_functions.jl")
+#include("../generated_fast_code/global_constants.jl")
+#include("../generated_fast_code/quoted_functions.jl")
 
 # generate setter and getters functions for the minoraxis to test different Earth
 """

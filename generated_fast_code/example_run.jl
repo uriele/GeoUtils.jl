@@ -111,9 +111,10 @@ begin
   # average radially
   atmosphere.temperature_ave[1:end-1,:] = (atmosphere.temperature_ave[1:end-1,:]+atmosphere.temperature_ave[2:end,:])./2
   atmosphere.pressure_ave[1:end-1,:] = (atmosphere.pressure_ave[1:end-1,:]+atmosphere.pressure_ave[2:end,:])./2
+end
   # average altitude
   atmosphere.temperature_ave[:,1:end-1] = (atmosphere.temperature_ave[:,1:end-1]+atmosphere.temperature_ave[:,2:end])./2
-  atmosphere.pressure_ave[:,1:end-1] = ( atmosphere.pressure_ave[:,1:end-1]- atmosphere.pressure_ave[:,2:end])./(log.(atmosphere.pressure_ave[:,1:end-1]./atmosphere.pressure_ave[:,2:end]))
+  atmosphere.pressure_ave[:,1:end-1] = ( atmosphere.pressure_ave[:,2:end]- atmosphere.pressure_ave[:,1:end-1])./(log.(atmosphere.pressure_ave[:,2:end]./atmosphere.pressure_ave[:,1:end-1]))
   for j in 1:size(atmosphere.temperature_ave,2)
     for i in 1:size(atmosphere.temperature_ave,1)
       atmosphere.refraction_index_ave[i,j]=refractive_index(temperature=atmosphere.temperature_ave[i,j],
@@ -123,6 +124,12 @@ begin
   # average altitude
 end
 # get refractive index
+phi_cloves
+z_cloves
+atmosphere.pressure_ave
+fig=Figure()
+ax,suf=surface(fig[1,1],atmosphere.temperature_ave)
+ax,suf=surface(atmosphere.pressure_ave)
 
 
 
@@ -134,7 +141,7 @@ ax3=Axis(figure[3,1][1,1],title="pressure",xlabel="ϕ°",ylabel="h km")
 
 s1=surface!(ax1,phi_cloves,z_cloves,atmosphere.refraction_index_ave.-1.0)
 s2=surface!(ax2,phi_cloves,z_cloves,atmosphere.temperature_ave)
-s3=surface!(ax3,phi_cloves,z_cloves,atmosphere.pressure_ave)
+s3=surface!(ax3,phi_cloves,z_cloves,pressure_hPa)
 Colorbar(figure[1,1][1,2],s1)
 Colorbar(figure[2,1][1,2],s2)
 Colorbar(figure[3,1][1,2],s3)
