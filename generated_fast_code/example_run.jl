@@ -1,4 +1,4 @@
-include("../generated_fast_code/implementation_new_ray_tracing.jl")
+include("./implementation_new_ray_tracing.jl")
 using NCDatasets
 using DataFrames
 using GeoUtils
@@ -12,14 +12,17 @@ cd("generated_fast_code")
 #  EARTH MODEL
 ##################################################################
 b_wgs84 = minor_axis_earth/major_axis_earth
+
+#=
 set_minoraxis(b_wgs84)
 b_mine  = get_minoraxis()
 e²_mine = get_e²()
 eccentricity²_earth≈get_e²()
 b_wgs84==b_mine
+=#
 ##################################################################
 
-cairt_nc=Dataset("../generated_fast_code/cairt_trace_out_test.nc")
+cairt_nc=Dataset("../generated_fast_code/cairt_trace_out_nuovo.nc")
 cairt_nc.group
 cairt_nc_orbit     = cairt_nc.group["orbit"]
 cairt_nc_atm       = cairt_nc.group["atm"]
@@ -92,10 +95,10 @@ for j in eachindex(z_cloves)
     for i in eachindex(phi_cloves)
         atmosphere[i,j]=AtmosphereProfile2D( 1.0,
         let
-          ismissing(temperature_K[end-j+1,i]) ? NaN : temperature_celsius[end-j+1,i]
+          ismissing(temperature_K[j,i]) ? NaN : temperature_celsius[j,i]
         end,
         let
-          ismissing(pressure_hPa[end-j+1,i]) ? NaN : pressure_Pa[end-j+1,i]
+          ismissing(pressure_hPa[j,i]) ? NaN : pressure_Pa[j,i]
         end,
         deg2rad(lat_degrees[i]),
         z_cloves[end-j+1]./major_axis_earth
@@ -154,6 +157,7 @@ save("./refraction_index_temperature_pressure.png",figure)
 r_satellite  = cairt_nc_orbit["radius"][1]/major_axis_earth
 inclination  = cairt_nc_orbit["inclination"][1]
 
+
 inclination  = cairt_nc_orbit["inclination"]
 cairt_nc_orbit
 cairt_nc_atm
@@ -184,6 +188,9 @@ inputray  = StructArray(Vector{InputRay{Float64}}(undef, total_scans))
     (θ0_geodesic,h_sat)= geocentric_xy_to_geodesic_θ(px,py)
 #   1.2 correct the angle
     θ0_geodesic_rad=deg2rad(θ0_geodesic)
+b_mine = b_wgs84
+    get_minoraxis(::T) where T = b_wgs84
+    get_e²(::T) where T = 1-(b_wgs84^2)
     θ_geodesic_rad = initialize_theta(θ0_geodesic_rad,px,py)
 # 2. Compute the cartesian cordinates
     earth_x,earth_y = (cos(θ_geodesic_rad),sin(θ_geodesic_rad)*b_mine)
@@ -207,12 +214,14 @@ inputray  = StructArray(Vector{InputRay{Float64}}(undef, total_scans))
     end
 # 7. Visually check if the direction makes sense
 
+e²_wgs84 = eccentricity²(ellipsoid(WGS84Latest))
+    ellipse(θ,h)= (cos(θ),sin(θ)*b_mine).+(b_mine*cos(θ),sin(θ)).*h./(sqrt(1-e²_wgs84*cos(θ)^2))
     # SHIFT THE ORIGIN OF THE GRID BY THE ANGLE OF THE SATELLITE
     atmosphere.θ_left[:,:]=repeat(deg2rad.(lat_degrees[:]),1,size(atmosphere,2)).+θ_geodesic_rad
 
     figure=Figure()
     ax=Axis(figure[1,1][1,1])
-    let
+#    let
       hh= extrema(atmosphere.s_top)[2]
       atmosphere.θ_left[:,1]
       for θ in atmosphere.θ_left[:,1]
@@ -234,6 +243,17 @@ inputray  = StructArray(Vector{InputRay{Float64}}(undef, total_scans))
       end
     end
 
+
+    h=cairt_nc_scans["tangent_points"][1,:,:]/major_axis_earth
+    θ=cairt_nc_scans["tangent_points"][2,:,:].+rad2deg(θ_geodesic_rad)
+
+    NN(theta)=1/sqrt(cosd(theta)^2+b_wgs84^2*sind(theta)^2)
+
+    point_ellipse(theta,h)= ((NN(theta)+h)*cosd(theta),sind(theta)*(b_mine^2*NN(theta)+h))
+
+list_of_points = [point_ellipse(θ,h) for (θ,h) in zip(θ,h)]
+
+    scatter!(ax,list_of_points[:],color=:blue)
     # Atmosphere array
 atmosphere = atmosphere
 # tangent quote
@@ -285,6 +305,8 @@ inputray.n
 tangent_quote
 atmosphere.refraction_index,ave[54,1]
 
+
+save("./ray_tracing.png",figure)
 reft_out
 tangent_quote
 
