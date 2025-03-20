@@ -4,7 +4,7 @@ using NCDatasets
 using DataFrames
 using GeoUtils
 using StructArrays
-using CairoMakie
+using WGLMakie
 function nadir_angle(w,z,ang)
   θ = atan(z/w)
  (nx,ny)=(-w,-z)|> x-> x./hypot(x...) .*-1.0
@@ -24,18 +24,8 @@ cd("generated_fast_code")
 b_wgs84 = minor_axis_earth/major_axis_earth
 e_wgs84 = sqrt(1-b_wgs84^2)
 ray(px,py,dx,dy,t)=(px,py).+(t*dx,t*dy)
-
 ellipse(θ,h)=(cos(θ),b_wgs84*sin(θ)).+h.*(b_wgs84*cos(θ),sin(θ))./sqrt(1-e_wgs84*cos(θ)*cos(θ))
 ##################################################################
-#=
-set_minoraxis(b_wgs84)
-b_mine  = get_minoraxis()
-e²_mine = get_e²()
-eccentricity²_earth≈get_e²()
-b_wgs84==b_mine
-=#
-##################################################################
-
 cairt_nc=Dataset("../generated_fast_code/cairt_trace_out_nuovo.nc")
 cairt_nc.group
 cairt_nc_orbit     = cairt_nc.group["orbit"]
@@ -45,18 +35,11 @@ cairt_nc_integrals = cairt_nc.group["integrals"]
 
 # Lat and Lon
 # Info scans
-polar_coordinates_along_orbit_deg = cairt_nc_scans["scans_phi"][:]
-# Don't know what is geometry
-# engineering quotes in km
 engineering_quotes = cairt_nc_scans["engineering_quotes"][:]
 view_angles_deg = cairt_nc_scans["view_angles"][:,:]
 tangent_points_z_km  = cairt_nc_scans["tangent_points"][1,:,:]
 tangent_points_θ_deg = cairt_nc_scans["tangent_points"][2,:,:]
 #######################################################
-npaths_scans = cairt_nc_integrals["npaths"][:,:]  # I assume it to be the number of interceptions
-
-phi_index_cloves_per_los = cairt_nc_integrals["phi_idx"][:,:,:] # I assume it to be the index of the phi clove
-z_index_per_los          = cairt_nc_integrals["z_idx"][:,:,:] # I assume it to be the index of the z clove
 path_lengths_km          = cairt_nc_integrals["length"][:,:,:] # I assume it to be the path length  equivalent to t in my code
 #######################################################
 # Information about the atmosphere
@@ -64,8 +47,6 @@ path_lengths_km          = cairt_nc_integrals["length"][:,:,:] # I assume it to 
 
 phi_cloves=cairt_nc_atm["phi"][:]
 z_cloves=cairt_nc_atm["z"][:]
-
-ngrids= cairt_nc_atm["ngrid"][:]
 
 altitudes_km = cairt_nc_atm["altitude"][:,:]
 
@@ -79,8 +60,6 @@ altitudes_km./=major_axis_earth
 tangent_points_z_km./=major_axis_earth
 path_lengths_km./=major_axis_earth
 #########################################################
-min_altitude=extrema(abs.(z_index_per_los[:,:,:]))[1]
-max_altitude=extrema(z_index_per_los[:,:,:])[2]
 
 # get the average temperature and pressure in each clove
 size(phi_cloves)
@@ -112,8 +91,6 @@ for j in eachindex(z_cloves)
     end
 end
 
-atmosphere.θ_left
-
 begin
   # average radially
   atmosphere.temperature_ave[1:end-1,:] = (atmosphere.temperature_ave[1:end-1,:]+atmosphere.temperature_ave[2:end,:])./2
@@ -134,26 +111,26 @@ end
 @inline extrema_noNaN(x)=extrema(filter(x-> !( ismissing(x) || isnan(x)) ,x))
 
 
-figure=Figure(size=(800/2,800))
-begin
-ax1=Axis(figure[1,1][1,1],title="refraction_index (n-1)",xlabel="ϕ°",ylabel="h km")
-ax2=Axis(figure[2,1][1,1],title="temperature",xlabel="ϕ°",ylabel="h km")
-ax3=Axis(figure[3,1][1,1],title="pressure",xlabel="ϕ°",ylabel="h km")
+figure=Figure(size=(800/1.5,800))
+with_theme(theme_latexfonts()) do
+  ax1=Axis(figure[1,1][1,1],title="refraction_index (n-1)",xlabel="ϕ°",ylabel="h km")
+  ax2=Axis(figure[2,1][1,1],title="temperature",xlabel="ϕ°",ylabel="h km")
+  ax3=Axis(figure[3,1][1,1],title="pressure",xlabel="ϕ°",ylabel="h km")
 
 
 
-s1=surface!(ax1,atmosphere.θ_left,atmosphere.s_top,
-atmosphere.refraction_index_ave.-1.0)
-s2=surface!(ax2,atmosphere.θ_left,atmosphere.s_top,
-atmosphere.temperature_ave)
-s3=surface!(ax3,atmosphere.θ_left,atmosphere.s_top,
-atmosphere.pressure_ave./extrema_noNaN(atmosphere.pressure_ave)[2])
-Colorbar(figure[1,1][1,2],s1)
-Colorbar(figure[2,1][1,2],s2)
-Colorbar(figure[3,1][1,2],s3)
+  s1=surface!(ax1,atmosphere.θ_left,atmosphere.s_top,
+  atmosphere.refraction_index_ave.-1.0)
+  s2=surface!(ax2,atmosphere.θ_left,atmosphere.s_top,
+  atmosphere.temperature_ave)
+  s3=surface!(ax3,atmosphere.θ_left,atmosphere.s_top,
+  atmosphere.pressure_ave./extrema_noNaN(atmosphere.pressure_ave)[2])
+  Colorbar(figure[1,1][1,2],s1)
+  Colorbar(figure[2,1][1,2],s2)
+  Colorbar(figure[3,1][1,2],s3)
 end
+figure
 save("./refraction_index_temperature_pressure.png",figure)
-atmosphere.θ_left
 
 # Using equation from part 3 of Casia DEL006
 r_satellite  = cairt_nc_orbit["radius"][1]/major_axis_earth
@@ -161,7 +138,6 @@ inclination  = cairt_nc_orbit["inclination"][1]
 
 # angle of the current position in degrees
 scans_phi = cairt_nc_scans["scans_phi"][:]
-cairt_nc_scans
 satx = @. r_satellite*cosd(scans_phi)
 saty = @. r_satellite*sind(scans_phi)
 
@@ -175,36 +151,7 @@ max_iterations = 140
 retrieval = StructArray(Matrix{ResultsRayTracing{Float64}}(undef, total_scans,max_iterations+1))
 # Input array
 inputray  = StructArray(Vector{InputRay{Float64}}(undef, total_scans))
-satx[2]
-saty[2]
- θsat,hsat =  geocentric_xy_to_geodesic_θ(satx[2],saty[2])
-atand(saty[2],satx[2])
-N = 1/sqrt(cosd(θsat)^2+b_wgs84^2*sind(θsat)^2)
-sx1,sy1 = (N*cosd(θsat),b_wgs84^2*N*sind(θsat))
-nx1,ny1 = (sx1,sy1/b_wgs84^2)
-
-
-figure=Figure()
-ax=Axis(figure[1,1])
-lines!(ax,
-[(sx1+nx1*h,sy1+ny1*h) for h in (0,hsat)]
-)
-
-for inp in inputray
-  lines!(ax,
-  [ray(inp.px,inp.py,inp.dx,inp.dy,t) for t in (0,1)])
-end
-ext_theta=extrema(atmosphere.θ_left)
-ext_h    =extrema(atmosphere.s_top)
-θ_radii = atmosphere.θ_left[:,1]
-h_levels= atmosphere.s_top[1,:]
-for θ in θ_radii
-  lines!(ax,[ellipse(θ,h) for h in ext_h],color=:black )
-end
-for h in h_levels
-  lines!(ax,[ellipse(θ,h) for θ in LinRange(ext_theta...,1000)],color=:black )
-end
-
+θsat,hsat =  geocentric_xy_to_geodesic_θ(satx[2],saty[2])
 
 # 1. Set the initial conditions
 fov=5  # number of field of vies per scan
@@ -232,8 +179,6 @@ for i in eachindex(satx,saty)
     inputray.dy[(i-1)*fov+j]=scan_direction[2]
   end
 end
-reshape(inputray.px,fov,10)
-reshape(inputray.dx,fov,10)
 
 marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,
   inputray::IR,outputray::OR,atmosphere::ATM,
@@ -250,9 +195,9 @@ marco_ray_tracing!(t_out,θ_out,s_out,
   outputray.px,outputray.py,outputray.dx,outputray.dy,
   tangent_quote,kwargs...)
 
-start_scan = 1
+start_scan = 48
 end_scan = 50
-num_scans = 120
+num_scans = 5
 begin
 test_retrieval=deepcopy(retrieval[start_scan:end_scan,1:num_scans+1])
 test_inputray=deepcopy(inputray[start_scan:end_scan])
@@ -267,19 +212,17 @@ end
 tangent_quote
 
 
-using BenchmarkTools
-@benchmark marco_ray_tracing!($t_out,$θ_out,$s_out, $test_inputray,$test_retrieval,$test_atmosphere,$tangent_quote)
+#using BenchmarkTools
+#@benchmark marco_ray_tracing!($t_out,$θ_out,$s_out, $test_inputray,$test_retrieval,$test_atmosphere,$tangent_quote)
 
 marco_ray_tracing!(t_out,θ_out,s_out, test_inputray,test_retrieval,test_atmosphere,tangent_quote)
-t_out
-test_retrieval[1,2].n
-test_retrieval[1,:].h
 
 
 for j in 1:10
   fig=Figure(size=(600,1000))
   with_theme(theme_latexfonts()) do
 
+    jjj=60
     ax1=Axis(fig[1,1][1,1],title="refractive index in clove",xlabel="iteration",ylabel="n-1")
     ax2=Axis(fig[2,1][1,1],title="length ray",xlabel="iteration",ylabel="km")
     ax3=Axis(fig[3,1][1,1],title="orbital coordinate",xlabel="iteration",ylabel="θ°")
@@ -304,20 +247,56 @@ for j in 1:10
     Label(fig[0, :][1,1], "Scan $j";tellwidth=false, fontsize=30)
 
   end
+  figure
   save("./scan$j.png",fig)
 end
-for i in 1:size(test_retrieval,1)
-  ii= mod1(i,5)
-  jj= rem
-  lines!(ax1,2:size(test_retrieval,2),[r.n for r in test_retrieval[i,2:end]],label="scan $i")
-  lines!(ax2,2:size(test_retrieval,2),[r.t for r in test_retrieval[i,2:end]])
-  lines!(ax3,2:size(test_retrieval,2),[r.θ for r in test_retrieval[i,2:]])
-  lines!(ax4,2:size(test_retrieval,2),[r.h for r in test_retrieval[i,2:]])
-end
-
+figure
 reshape(tangent_quote,5,10).*major_axis_earth
 
 test_retrieval.h[:,73:76].*major_axis_earth
 reshape(tangent_quote .*major_axis_earth,5,10)
 engineering_quotes
 tangent_points_z_km' *major_axis_earth
+
+
+fig=Figure()
+ax=Axis(fig[1,1])
+ww=48
+bb=3
+scatterlines!(ax,[(x,y) for (x,y) in zip(retrieval.px[ww,1:bb],retrieval.py)],label="engineering_quotes")
+fig
+
+
+
+
+figure=Figure()
+ax=Axis(figure[1,1])
+
+for inp in inputray
+  lines!(ax,
+  [ray(inp.px,inp.py,inp.dx,inp.dy,t) for t in (0,1)])
+end
+ext_theta=extrema(atmosphere.θ_left)
+ext_h    =extrema(atmosphere.s_top)
+θ_radii = atmosphere.θ_left[:,1]
+h_levels= atmosphere.s_top[1,:]
+for θ in θ_radii
+  lines!(ax,[ellipse(θ,h) for h in ext_h],color=:black )
+end
+for h in h_levels
+  lines!(ax,[ellipse(θ,h) for θ in LinRange(ext_theta...,1000)],color=:black )
+end
+
+
+
+scatter!(ax,[(px,py) for (px,py) in zip(test_retrieval.px[1,2:end],test_retrieval.py[1,2:end])])
+TTT=10
+
+
+scatter!(ax,[(px,py) for (px,py) in zip(test_retrieval.px[1,2:TTT],test_retrieval.dy[1,2:TTT])])
+
+for (px,py,dx,dy,t) in zip(test_retrieval.px[1,2:end],test_retrieval.py[1,2:end],test_retrieval.dx[1,2:end],test_retrieval.dy[1,2:end],test_retrieval.t[1,2:end])
+  lines!(ax,[ray(px,py,dx,dy,t) for t in (0,1)])
+end
+
+test_retrieval.dx'
