@@ -1,23 +1,40 @@
-@inline function _compute_newtop_step(s::T, dx1::T, dy1::T, cosθ::T, sinθ::T, Fx::T,Fy::T,Px::T,Py::T, b_normalized::T,e²::T,N₀::T )::T where T
-  local cos2θ = cosθ * cosθ - sinθ * sinθ
-  local sin2θ = 2 * sinθ * cosθ
+
+
+const OUTWARDS = true
+const INWARDS = false
+const CLOCKWISE = true
+const COUNTCLOCKWISE = false
+@inline _normal(nx::T,ny::T,  outwards::Bool)   where T =  outwards  ==OUTWARDS   ? (nx,ny) : (-ny,-nx)
+@inline _tangent(nx::T,ny::T, clockwise::Bool) where T =   clockwise ==CLOCKWISE ? (ny,-nx) : (-ny,nx)
+
+@inline function corrected_compute_newtop_step(s::T, dx1::T, dy1::T, cosθ::T, sinθ::T, Fx::T,Fy::T,Px::T,Py::T, b_normalized::T,e²::T,N₀::T)::T where T
+  local cos2θ = cosθ^2 - sinθ^2
+  local half_sin2θ = sinθ * cosθ
   local N₀² = N₀ * N₀
   # f=1/2*((Fx-Px)^2 + (Fy-Py)^2)
   # compute dNdθ
   local b  = b_normalized
-  local s₀ = s
-  local s₀b = s₀ * b
-  local ∂N∂θ   = - T(0.5) * e² * sin2θ * N₀² * N₀
-  local ∂²N∂θ² = -e² *N₀² * N₀ *(cos2θ  + T(3) *N₀² * e² *e² * sin2θ^2)
-  local parenthesis1 =( T(1)   + s₀b * N₀)
-  local parenthesis2 =( s₀b    +       N₀)
+  local px = cosθ
+  local py = sinθ
+  local ∂px∂θ = -sinθ
+  local ∂py∂θ =  cosθ
+  local ∂²px∂θ² = -px
+  local ∂²py∂θ² = -py
+
+  local s₀      = s
+  local s₀b     = s₀ * b
+  local ∂R₀∂θ   = e² * half_sin2θ
+  local ∂²R₀∂θ² = e² * cos2θ
+  local ∂N∂θ    = -  ∂R₀∂θ
+  local ∂²N∂θ²  = (T(3) *N₀² * ∂R₀∂θ^2 -  ∂²R₀∂θ²)
+
 
   # First derivatives of Fx and Fy
-  local  ∂Fx∂θ = -sinθ *parenthesis1+ cosθ * s₀b * ∂N∂θ
-  local  ∂Fy∂θ =  cosθ *parenthesis2 + sinθ * ∂N∂θ
+  local  ∂Fx∂θ = ∂px∂θ   +  s₀b*N₀*(∂px∂θ+px*∂N∂θ*N₀²)
+  local  ∂Fy∂θ = ∂py∂θ*b +  s₀ *N₀*(∂py∂θ+py*∂N∂θ*N₀²)
 
-  local  ∂²Fx∂θ² = -cosθ * parenthesis1 -2 * sinθ *s₀b* ∂N∂θ + cosθ*s₀b* ∂²N∂θ²
-  local  ∂²Fy∂θ² = -sinθ * parenthesis2 - 2 * cosθ * s₀ * b_normalized * ∂N∂θ + s₀ * b_normalized * ∂²N∂θ²
+  local  ∂²Fx∂θ² = ∂²px∂θ²+s₀b*N₀*(∂²px∂θ²+(2*∂px∂θ*∂N∂θ + px*N₀² * ∂²N∂θ²)*N₀²)
+  local  ∂²Fy∂θ² = ∂²py∂θ²+s₀ *N₀*(∂²py∂θ²+(2*∂py∂θ*∂N∂θ + py*N₀² * ∂²N∂θ²)*N₀²)
 
       # Compute t and its derivatives
   local ∂t∂θ = dx1 * ∂Fx∂θ + dy1 * ∂Fy∂θ
@@ -28,39 +45,116 @@
   local ∂²Px∂θ² = dx1 * ∂²t∂θ²
   local ∂²Py∂θ² = dy1 * ∂²t∂θ²
 
-  local Δfx= Fx - Px
-  local Δfy= Fy - Py
+  local fx= Fx - Px
+  local fy= Fy - Py
   local ∂fx∂θ = ∂Fx∂θ - ∂Px∂θ
   local ∂fy∂θ = ∂Fy∂θ - ∂Py∂θ
   local ∂²fx∂θ² = ∂²Fx∂θ² - ∂²Px∂θ²
   local ∂²fy∂θ² = ∂²Fy∂θ² - ∂²Py∂θ²
-  local g_step= 2*Δfx * ∂fx∂θ + 2*Δfy * ∂fy∂θ
-  local h_step= 2 * (∂fy∂θ^2 + Δfx * ∂²fx∂θ² + Δfy * ∂²fy∂θ²)
+  local g_step= (fx * ∂fx∂θ + fy * ∂fy∂θ)
+  local h_step= (∂fx∂θ^2+∂fy∂θ^2 + fx * ∂²fx∂θ² + fy * ∂²fy∂θ²)
 
-  local λ = 5*10^-5
-  local ϵ = 10^-5
+  local λ = 10^-10
+#=
+  half_dR = e² * half_sin2θ
+  half_dR² = half_dR * half_dR
+  half_d²R = e² * cos2θ
+  N² = N * N
+  dNdθ = -half_dR
+  d²Ndθ² = -half_d²R + 3 * N² * half_dR²
+  ddx2dθ = (ddx2dθ_0 + N² * dNdθ * dx2) * N
+  ddy2dθ = (ddy2dθ_0 + N² * dNdθ * dy2) * N
+end
+begin
+  dFxdθ = dpx2dθ + s * ddx2dθ
+  dFydθ = dpy2dθ + s * ddy2dθ
+=#
 
-  h_step = (h_step - λ) > ϵ ? h_step :  λ  # sufficient positiveness of the hessian
+  h_step = abs(h_step)>λ ? h_step : λ  # sufficient positiveness of the hessian
+
+  @debug "g_step $g_step"
+  @debug "h_step $h_step"
 
   return -g_step / h_step
+end
+@inline function _update_earth_ray(θ::T,b::T,e²::T,ϵ::T)::Tuple{T,T,T,T,T} where T
+  return (cos(θ),b*sin(θ),b*cos(θ),sin(θ),_compute_N₀(θ,e²,ϵ))
 end
 
 @inline function _update_angle(θ::T,p_newton::T)::T where T
    return mod2pi(θ + p_newton)
 end
 
-@inline function _compute_N₀(cosθ::T,e²::T,ϵ::T)::T where T
+
+@inline function _clampθ(θ::T,θmin::T,θmax::T)::T where T
+  # simple case
+  @debug "θmin: $(θmin) θ: $θ  θmax: $(θmax)"
+  θmin<=θmax && return clamp(θ,θmin,θmax)
+  @debug " [θmin,2pi) U [0,θmax]"
+  θ>θmin || θ<θmax && return θ
+  local distance_from_theta_min = mod(θ - θmin, 2π)
+  local distance_from_theta_max = mod(θmax - θ, 2π)
+  return distance_from_theta_min < distance_from_theta_max ? θmin : θmax
+end
+
+
+@inline function _bend_ray!(direction_ray_x::T,direction_ray_y::T,Nx::T,Ny::T,n_incident::T,n_transmitted::T)::Tuple{T,T} where T
+
+  local norm_ray_direction = hypot(direction_ray_x,direction_ray_y)
+  local norm_normal        = hypot(Nx,Ny)
+  direction_ray_x/=norm_ray_direction
+  direction_ray_y/=norm_ray_direction
+  Nx/=norm_normal
+  Ny/=norm_normal
+  local n01=n_incident/n_transmitted
+  local n01²=n01*n01
+  local cosθ_incident=-(Nx*direction_ray_x+Ny*direction_ray_y)
+  local sinθ²_transmitted =n01²*(1-cosθ_incident*cosθ_incident)
+
+  if sinθ²_transmitted ≤ 1
+    direction_ray_x= n01*direction_ray_x+(n01*cosθ_incident-sqrt(1-sinθ²_transmitted))*Nx
+    direction_ray_y= n01*direction_ray_y+(n01*cosθ_incident-sqrt(1-sinθ²_transmitted))*Ny
+  else
+    direction_ray_x-=2*cosθ_incident*Nx
+    direction_ray_y-=2*cosθ_incident*Ny
+    #readline()
+  end
+  return (direction_ray_x,direction_ray_y)
+end
+
+@inline function  _interception_two_rays(x1::T,y1::T,x2::T,y2::T,dx1::T,dx2::T, dy1::T, dy2::T)::Tuple{T,T} where T
+  local ϵ = 1.0e-10
+  local d1_cross_d2 = dx1 * dy2 - dy1 * dx2 # determinant
+  local Δx = x2 - x1
+  local Δy = y2 - y1
+  # check if the rays are parallel
+  if abs(d1_cross_d2) < ϵ
+    # note: s<0 is impossible in this context because it means the ray is inside the ellipse
+    return T(-1),T(-1)
+  end
+  local t = (Δx * dy2 - Δy * dx2) / d1_cross_d2
+  local s = (Δx * dy1 - Δy * dx1) / d1_cross_d2
+  return t,s
+end
+
+@inline _check_if_stopped(i_wedge_right::Int,j_wedge_top)::Bool= j_wedge_top<1 || i_wedge_right<1
+
+
+@inline function _compute_N₀(θ::T,e²::T,ϵ::T)::T where T
+  local cosθ = cos(θ)
   local cosθ² = cosθ * cosθ
   local R₀ = max(T(1) - e² * cosθ²,ϵ)
   return T(1)/√(R₀)
 end
-@inline _increment_penality(ρ::T, γ::T, ρ_max::T) = min(ρ*γ,ρ_max)
-@inline _distance²(cx::T,cy::T) = cx * cx + cy * cy
-@inline _compute_minimum_t(origin_time_direction_i::T, dx_i::T, dy_j::T, pointx_j::T, pointy_j::T) = -origin_time_direction_i + (dx_i * pointx_j + dy_j * pointy_j)
+@inline _increment_penality(ρ::T, γ::T, ρ_max::T) where T = min(ρ*γ,ρ_max)
+@inline _distance²(cx::T,cy::T) where T = cx * cx + cy * cy
+@inline _compute_minimum_t(origin_time_direction_i::T, dx_i::T, dy_j::T, pointx_j::T, pointy_j::T) where T = -origin_time_direction_i + (dx_i * pointx_j + dy_j * pointy_j)
 @inline _compute_ray_at__t(point_i, direction_i, t_i) = point_i + t_i * direction_i
 @inline function _top_skip_condition(i::Int, j::Int,iter::Int)
-  iter==1 &&    return true # skip the first iteration
-  j>0 || i>0 || return false # if any of the index is negative, return false
+  iter==1    &&    return false # skip the first iteration
+  @debug "iter greater than 1"
+  (j>0 || i>0) && return false # if any of the index is negative, return false
+  @debug "iter greater than 1 and j or i are negative"
   return true
 end
 
@@ -68,15 +162,15 @@ end
   if isPeriodic
     return mod1(i,N)
   else
-    return update_index_j(i,N)
+    return _update_index_j(i,N)
   end
 end
 @inline _update_index_j(j::Int, M::Int)= j<=M ? j : -1
 
-const Δθ_SHIFT = 1e-5
+
 
 """
-  fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady::A,incident_refractive_index::A,aθmin::A,aθmax::A,ascending::AB,
+  marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady::A,incident_refractive_index::A,aθmin::A,aθmax::A,ascending::AB,
   atm_n::M,atm_θ::V1,atm_h::V2,retrieval_i::RETi,retrieval_j::RETi,retrieval_n::RETf,retrieval_θ::RETf,retrieval_t::RETf,retrieval_h::RETf,
   retrieval_px::RETf,retrieval_py::RETf,retrieval_dx::RETf,retrieval_dy::RETf,
   tangent_quote::A;δ=1e-10,kmax::Int=30,intersection_max::Int=140,initialized=false,free_space::T=T(1),rho_max::T=T(50.0) kwargs...
@@ -118,12 +212,12 @@ is optimized to avoid any allocation and to be as fast as possible.
 
 
 """
-function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady::A,incident_refractive_index::A,aθmin::A,aθmax::A,ascending::AB,
+function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady::A,incident_refractive_index::A,aθmin::A,aθmax::A,ascending::AB,
   atm_n::M,atm_θ::V1,atm_h::V2,retrieval_i::RETi,retrieval_j::RETi,retrieval_n::RETf,retrieval_θ::RETf,retrieval_t::RETf,retrieval_h::RETf,
   retrieval_px::RETf,retrieval_py::RETf,retrieval_dx::RETf,retrieval_dy::RETf,
-  tangent_quote::A;δ=1e-10,kmax::Int=30,rho_max::T=T(50.0),gamma::(T),
+  tangent_quote::A;δ=1e-10,kmax::Int=30,
   intersection_max::Int=140,initialized=false,free_space::T=T(1), kwargs...
-  ) where {V1<:AbstractVector, V2<:AbstractVector, RETi, RETf, M, A<:AbstractArray{T}, AB<:AbstractArray{Bool}} where T<:IEEEFloat
+  )::Nothing where {V1<:AbstractVector, V2<:AbstractVector, RETi, RETf, M, A<:AbstractArray{T}, AB<:AbstractArray{Bool}} where T<:IEEEFloat
   # consistency checks
   begin
     @assert size(adx) == size(ady) "Direction coordinates (adx, ady) must have the same size"
@@ -174,15 +268,14 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
   local number_rays_stopped=0
   local max_altitude=atm_h[1]
 
-  @info "Starting the ray tracing"
-  @info "max_altitude is $max_altitude"
-  @info " extrema of atm_h is $(minimum(atm_h)) and $(maximum(atm_h))"
+  @debug "Starting the ray tracing"
+  @debug "max_altitude is $max_altitude"
+  @debug " extrema of atm_h is $(minimum(atm_h)) and $(maximum(atm_h))"
 
   @inbounds for iter in 1:iter_eff
-
-      #@batch for idx_rays in eachindex(t_out)
-      for idx_rays in eachindex(t_out)
-        @info "Ray $idx_rays and iteration $iter"
+    for idx_rays in eachindex(t_out)
+      @debug "######################################"
+      @debug "Ray $idx_rays and iteration $iter"
 
         #######################################
         # Initialize local variables
@@ -207,9 +300,6 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
 
         local origin_times_direction_1 = px1 * dx1 + py1 * dy1
 
-        ## Earth Ray(s)
-        local nₜ  = T(0)
-
         # function to minimize and its derivatives
         local f = T(0)
         local fold = T(0)
@@ -218,119 +308,144 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
         ###########################################################################################
         # First initialization
         # I can assume this has been taken care during the end of the code after the first iteration
-        local i_wedge_left= retrieval_i[idx_rays,iter] # gibberish the first iteration
-        local j_wedge_top= retrieval_j[idx_rays,iter] # gibberish the first iteration
+        local i_wedge_right  = retrieval_i[idx_rays,iter]
+        local j_wedge_top    = retrieval_j[idx_rays,iter] # gibberish the first iteration
         ############################################################################################
-        local i_wedge_right = _update_index_i(i_wedge_left+1,Natm_n,IsPeriodic)
+        local i_wedge_left   = _update_index_i(i_wedge_right+1,Natm_n,IsPeriodic)
         local j_wedge_bottom = _update_index_j(j_wedge_top+1,Matm_n)
-        local isAscending = ascending[idx_rays]  # initially false
+        local isAscending    = ascending[idx_rays]  # initially false
         #################################################
         # Initialize local variables
         # @turbo and @batch needs to know at compilation time
         #################################################
 
-        local s_bottom  = j_wedge_top > 0 ? atm_h[j_wedge_bottom]    : max_altitude
+        local isAscending    = iter           > 1 ?  ascending[idx_rays] : false  # initially false
+
+        local s_bottom  = j_wedge_top       > 0 ? atm_h[j_wedge_bottom]    : max_altitude
         local s_top     = j_wedge_bottom    > 0 ? atm_h[j_wedge_top] : T(-99)
         local nᵢ        = iter           > 1 ? incident_refractive_index[idx_rays] : free_space
         local s         = iter           > 1 ? s_out[idx_rays]   :  max_altitude
         local θ         = iter           > 1 ? θ_out[idx_rays]   : atan(py1,px1)  # initial guess
         local θmin      = iter           > 1 ? aθmin[idx_rays]   : -Inf
         local θmax      = iter           > 1 ? aθmax[idx_rays]   :  Inf
-        local s_target²  = s*s # to be used later
+        local is_s_top  = s_top*isAscending
+        local is_s_bottom = s_bottom*!isAscending
+
+        @debug "s: $s s_top : $is_s_top is s bottom : $is_s_bottom   isAscending: $isAscending"
+        local s_target  = iter           > 1 ? s_top*isAscending+ s_bottom*!isAscending : max_altitude
+        @debug "s_target: $s_target  $(is_s_top+is_s_bottom)"
+
         local current_quote_tangent = iter >1 ? tangent_quote[idx_rays] : T(Inf)
+        local θ_old = θ
+        local θ_previous = θ
+        local s_old = s
+
+
+        if iter==1
+          retrieval_i[idx_rays,iter]=i_wedge_right
+          retrieval_j[idx_rays,iter]=j_wedge_top
+          retrieval_θ[idx_rays,iter]=θ
+          retrieval_t[idx_rays,iter]=T(0)
+          retrieval_h[idx_rays,iter]=s_target
+          retrieval_n[idx_rays,iter]=nᵢ
+          retrieval_px[idx_rays,iter]=px1
+          retrieval_py[idx_rays,iter]=py1
+          retrieval_dx[idx_rays,iter]=dx1
+          retrieval_dy[idx_rays,iter]=dy1
+        end
+
+
         #################################################
         # DEBUG
-        @info "---------------------------------------------"
-        @info " try to minimize towards $s "
-        @info " top $(s_top) and bottom$(s_bottom))"
-        @info " isAscending is $isAscending"
-        @info "---------------------------------------------"
+        @debug "---------------------------------------------"
+        @debug " try to minimize towards $s_target "
+        @debug " top $(s_top) and bottom$(s_bottom))"
+        @debug "j_wedge_top   : $j_wedge_top     s_top: $(s_top)"
+        @debug "j_wedge_bottom: $j_wedge_bottom  s_bottom: $(s_bottom)"
+
+        @debug " isAscending is $isAscending"
+        @debug "---------------------------------------------"
         #################################################
 
         local px1_current = px1
         local py1_current = py1
         local dx1_current = dx1
         local dy1_current = dy1
-
+        local i_previous = i_wedge_right
+        local j_previous = j_wedge_top
 
         # if iter>1 and any index is negative
+
 
         if _top_skip_condition(min(i_wedge_left,i_wedge_right),min(j_wedge_top,j_wedge_bottom),iter)
             retrieval_h[idx_rays,iter+1]=T(-999)
             retrieval_t[idx_rays,iter+1]=T(-999)
-            retrieval_px[idx_rays,iter+1]=px
-            retrieval_py[idx_rays,iter+1]=px
-            retrieval_dx[idx_rays,iter+1]=dx
-            retrieval_dy[idx_rays,iter+1]=dx
-            retrieval_i[idx_rays,iter+1]=i_wedge_left
+            retrieval_px[idx_rays,iter+1]=px1
+            retrieval_py[idx_rays,iter+1]=px1
+            retrieval_dx[idx_rays,iter+1]=dx1
+            retrieval_dy[idx_rays,iter+1]=dx1
+            retrieval_i[idx_rays,iter+1]=i_wedge_right
             retrieval_j[idx_rays,iter+1]=j_wedge_top
             retrieval_n[idx_rays,iter+1]=nᵢ
             retrieval_θ[idx_rays,iter+1]=θ
             continue
         end
 
+        local px2 = T(0)
+        local py2 = T(0)
+        local dx2 = T(0)
+        local dy2 = T(0)
+
         begin
+          local N₀ = T(0)
 
-          ### Trugonometric functions
-          local cosθ = cos(θ)
-          local sinθ = sin(θ)
-          local bcosθ = b_normalized * cosθ
-          local bsinθ = b_normalized * sinθ
-
-
-          local N₀ = _compute_N₀(θ,e²,ϵ)
-
-          #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-          local penality_t = T(0)
-          local f_with_penality
-          local rho = 0.0 #penality factor
-          local gamma = 1.5 #penality factor
-          #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-
-          local px2 = cosθ
-          local py2 = bsinθ
-          local dx2 = bcosθ
-          local dy2 = sinθ
-              # point on the normal of the ellipse
-          local Fx   =  _compute_ray_at__t(px2, dx2*N₀,s)
-          local Fy   =  _compute_ray_at__t(py2, dy2*N₀,s)
+          (px2,py2,dx2,dy2,N₀) = _update_earth_ray(θ,b_normalized,e²,ϵ)
+          local Fx   =  _compute_ray_at__t(px2, dx2*N₀,s_target)
+          local Fy   =  _compute_ray_at__t(py2, dy2*N₀,s_target)
           t     = _compute_minimum_t(origin_times_direction_1, dx1, dy1, Fx, Fy)
 
 
-          Px = _compute_ray_at__t(px1, dx1, t)
           Px = _compute_ray_at__t(px1, dx1, t)
           Py = _compute_ray_at__t(py1, dy1, t)
 
           local fx= Fx - Px
           local fy= Fy - Py
           local k_iter = 0
-          f = _distance²(fx,fy)
+          f = sqrt(_distance²(fx,fy))
           fold = f
 
-          # Newton loop
-
+          θ_old = θ
+            # Newton loop
+          @debug "Starting the Newton loop θ0 is $θ"
           for k_iter in 1:kmax
-            p_newton =  _compute_newtop_step(s, dx1, dy1, cosθ, sinθ, Fx,Fy,Px,Py, b_normalized,e²,N₀ )
-            θ = _update_angle(θ,p_newton) mod2pi(θ + p_newton)
-            cosθ = cos(θ)
-            sinθ = sin(θ)
-            N₀ = _compute_N₀(cosθ,e²,ϵ)
-            Fx   =  _compute_ray_at__t(px2, dx2*N₀,s)
-            Fy   =  _compute_ray_at__t(py2, dy2*N₀,s)
-            t     = _compute_minimum_t(origin_times_direction_1, dx1, dy1, Fx, Fy)
-            Px    = _compute_ray_at__t(px1, dx1, t)
-            Py    = _compute_ray_at__t(py1, dy1, t)
-            fx= Fx - Px
-            fy= Fy - Py
-            f = _distance²(fx,fy)
+              p_newton =  corrected_compute_newtop_step(s_target, dx1, dy1, px2, dy2, Fx,Fy,Px,Py, b_normalized,e²,N₀ )
 
-            if abs(f-fold)<δ
-              @info "Convergence reached in $k_iter iterations"
-              break
-            end
-            fold = f
+              θ = _update_angle(θ,p_newton)
+              (px2,py2,dx2,dy2,N₀) = _update_earth_ray(θ,b_normalized,e²,ϵ)
+
+              Fx     =  _compute_ray_at__t(px2, dx2*N₀,s_target)
+              Fy     =  _compute_ray_at__t(py2, dy2*N₀,s_target)
+              t      = _compute_minimum_t(origin_times_direction_1, dx1, dy1, Fx, Fy)
+              Px     = _compute_ray_at__t(px1, dx1, t)
+              Py     = _compute_ray_at__t(py1, dy1, t)
+              fx= Fx - Px
+              fy= Fy - Py
+              f = sqrt(_distance²(fx,fy))
+
+              @debug "p_newton is $p_newton  θ is $θ  t is $t"
+
+
+
+              if abs(f-fold)<δ  && abs(θ-θ_old)<δ
+                @debug "Convergence reached in $k_iter iterations"
+                @debug "f is $f and fold is $fold"
+                @debug "θ is $θ and θold id $θ_old"
+                @debug "θ is $θ and θold id $θ_previous"
+                break
+              end
+              fold = f
+              θ_old = θ
           end
-
           # compute the distance between the new point Px,Px and the ellipse with origin
           # at px2,py2 and the normal Fx,Fy
           # I know that the minimum distance between the ellipse and the point of interest is  the ⟂ distance
@@ -338,357 +453,170 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
 
 
           # I am moving towards the ellipse
-          t = max(t,0)
-          Px = _compute_ray_at__t(px1, dx1, t)
-          Py = _compute_ray_at__t(py1, dy1, t)
-          if t==0
-            (s>=max_altitude) && j_wedge_top = -1
-            (s<=0) && j_wedge_top = 0
+          # 1. check if t>0
+          if t<=0
+            t=T(0)
+            θ=θ_old
+            s=s_old
+          end
+
+          # 2. check if it is in the bounds of θmin and θmax
+          dx2=N₀*dx2
+          dy2=N₀*dy2
+          @debug "(t,s) $(t), $(s)"
+          θ=_clampθ(θ,θmin,θmax)
+
+          @debug "Pre (t,s) $(t), $(s)"
+            @debug "s: $s s_target $s_target Δs: $(s-s_target)"
+          (t,s) = _interception_two_rays(px1,py1,px2,py2,dx1,dx2,dy1,dy2)
+
+          @debug "Post (t,s) $(t), $(s)"
+            @debug "s: $s s_target $s_target Δs: $(s-s_target)"
+          if (θ==θ_previous && t==0)
+            @debug "θ is the same"
+
             isAscending = !isAscending
-            current_quote_tangent=min(s,current_quote_tangent)
-          end
-
-          local Δp12x = Px - px2  #earth to ray
-          local Δp12y = Py - py2  #earth to ray
-
-          begin
-            px2 = cos(θ)
-            py2 = sin(θ) * b_normalized
-            dx2 = b_normalized * cos(θ)
-            dy2 = sin(θ)
-            normF = hypot(dx2, dy2)
-            dx2 /= normF
-            dy2 /= normF
-
-            det = dx1 * dy2 - dy1 * dx2
-            ϵ = 1.0e-10        # TO DO: maybe add this value as a kwargs
-            s = NaN        # initial s to NaN
-            t = NaN        # initial t to NaN
-            local Δp12x = px2 - px1
-            local Δp12y = py2 - py1
-
-
-            if abs(det) > ϵ
-              t = (Δp12x * dy2 - Δp12y * dx2) / det
-              s = (Δp12x * dy1 - Δp12y * dx1) / det
-            end
-            if (s < 0) # it starts from the ellipse surface, so a negative value is not possible
-              s = NaN
-            end
-          end
-
-          @inline function  _interception_two_lines(x1::T,y1::T,x2::T,y2::T,d1::T, d) where T
-            return (A-D)/(B-D)
-
-
-
-          end
-
-
-          if  (Δp12² <= s_target²) && (isAscending==false)
-
-          elseif (Δp12² => s_target²) && (isAscending==true)
-          end
-
-
-          begin
-            if (θmin <= θmax && θmin < θ < θmax) || (θmin > θmax && (θ > θmin || θ < θmax))
-
-
-                s += sqrt(f) * directional_sign
-
-            else
-
-
-
-              # angle clamping f(θ,θmin,θmax)
-              let
-                if θmin<=θmax
-                  θ=clamp(θ,θmin,θmax)
-
-                else
-
-                  dmin = mod(θ - θmin, 2π)
-                  dmax = mod(θmax - θ, 2π)
-                  θ = dmin < dmax ? θmin : θmax
-                end
-                θ
-              end
-              #update (px1,px2,θ,t,s)
-              begin
-                px2 = cos(θ)
-                py2 = sin(θ) * b_normalized
-                dx2 = b_normalized * cos(θ)
-                dy2 = sin(θ)
-                normF = hypot(dx2, dy2)
-                dx2 /= normF
-                dy2 /= normF
-
-                det = dx1 * dy2 - dy1 * dx2
-                ϵ = 1.0e-10        # TO DO: maybe add this value as a kwargs
-                s = NaN        # initial s to NaN
-                t = NaN        # initial t to NaN
-                local Δp12x = px2 - px1
-                local Δp12y = py2 - py1
-
-
-                if abs(det) > ϵ
-                  t = (Δp12x * dy2 - Δp12y * dx2) / det
-                  s = (Δp12x * dy1 - Δp12y * dx1) / det
-                end
-                if (s < 0) # it starts from the ellipse surface, so a negative value is not possible
-                  s = NaN
-                end
-              end
-            end
-          end
-          # check if the direction of the ray has changed and if it did, set the ascending to true
-          # this helps to find easily the tangent quote
-          # next iteration will look for the ascending s instead of the descending one
-
-          #update all the output for the current iteration
-        end
-
-        # find new index_i and index_j as well as the neighbors refractive index
-
-        begin
-          if iter==1 && initialized==false
-            # find the index of the wedge using binary search
-            # assume left orientation of the ray
-            # TO DO: add the right orientation of the ray
-            i_wedge_left = findlast(atm_θ.<= θ)
-            i_wedge_right = i_wedge_left+1
-            j_wedge_top = 1
-            j_wedge_bottom = 2
-            #if s>max_altitude+ϵ  # the first ray never intersected the atmosphere
-            #  j_wedge_top = -2
-            #end
-            # NOTE: the first intersection can only be downward so dx2 and dy2 are already the outward normal
-            # to the wedge
-
 
           else
-            @info "--------------------------------------------------"
-            @info "  θ   : $(rad2deg(θ))°  "
-            @info "  θmin: $(rad2deg(θmin))°  "
-            @info "  θmax: $(rad2deg(θmax))°  "
-            @info "  Δh  : $(f)  "
-            @info "  s_top: $(s_top)  "
-            @info "  s_bottom: $(s_bottom)  "
-            @info "  s  : $(s)  "
-            @info "--------------------------------------------------"
-            begin
-              local tmp = dx2
-              if  θmin<θ<θmax
-                @info "Between 2 wedges"
-                if  (abs(f)>10^-5 && isAscending==false)
-                    @info " in the middle of the atmosphere"
-                    tangent_quote[idx_rays]=s
-                    isAscending = true
-                    # assume left handiness
-                    # TO DO: implement the right handiness
-                    # set to the next ray
-                    θ=θmax
-                    local t_old=t
-                    local i_wedge_old=i_wedge_left
-                    local j_wedge_old=j_wedge_top
-                    # update to the next wedge
-                    begin
-                      i_wedge_left = i_wedge_left+1
-                      i_wedge_right = i_wedge_left+1
-                      dx2 =  dy2
-                      dy2 = -tmp
-                    end
-                    # the ray is going up so I send it to the next ray after registering the
-                    # tangent quote
-                    #update (px1,px2,θ,t,s)
-                    begin
-                      px2 = cos(θ)
-                      py2 = sin(θ) * b_normalized
-                      dx2 = b_normalized * cos(θ)
-                      dy2 = sin(θ)
-                      normF = hypot(dx2, dy2)
-                      dx2 /= normF
-                      dy2 /= normF
 
-                      det = dx1 * dy2 - dy1 * dx2
-                      ϵ = 1.0e-10        # TO DO: maybe add this value as a kwargs
-                      s = NaN        # initial s to NaN
-                      t = NaN        # initial t to NaN
-                      local Δp12x = px2 - px1
-                      local Δp12y = py2 - py1
+            local nx = dx2
+            local ny = dy2
+            # 3. compute corrected (t,s)
+            (px2,py2,dx2,dy2,N₀) = _update_earth_ray(θ,b_normalized,e²,ϵ)
+            dx2*=N₀
+            dy2*=N₀
+            @debug "Pre: (t,s) is $t and $s"
+            @debug "s: $s_target: $s_target Δs: $(s-s_target)"
 
+            if θ==θmax
+              @debug "θ=θmax"
+              i_wedge_right = _update_index_i(i_wedge_right+1,Natm_n,IsPeriodic)
+              i_wedge_left  = _update_index_i(i_wedge_right+1,Natm_n,IsPeriodic)
 
-                      local Δp12² = _distance²(Δp12x,Δp12y)
+              @debug " nx: $dx2 ny: $dy2"
+              (dx2,dy2) = _tangent(nx,ny,CLOCKWISE)
 
+              @debug " tx: $dx2 ty: $dy2"
+            elseif θ==θmin
 
+              @debug "θ=θmin"
 
+              @debug " nx: $dx2 ny: $dy2 tx: $(-dy2) ty: $(dx2)"
+              i_wedge_right = _update_index_i(i_wedge_right-1,Natm_n,IsPeriodic)
+              i_wedge_left = _update_index_i( i_wedge_right+1,Natm_n,IsPeriodic)
 
+              (dx2,dy2) = _tangent(nx,ny,COUNTCLOCKWISE)
+            elseif abs(s-s_target)<10*δ
 
-                      if abs(det) > ϵ
-                        t = (Δp12x * dy2 - Δp12y * dx2) / det
-                        s = (Δp12x * dy1 - Δp12y * dx1) / det
-                      end
-                      if (s < 0) # it starts from the ellipse surface, so a negative value is not possible
-                        s = NaN
-                      end
-                    end
+              @debug "new_level"
+              j_step = isAscending ? -1 : 1
+              j_wedge_top = _update_index_j(j_wedge_top+j_step,Matm_n)
+              j_wedge_bottom = _update_index_j(j_wedge_top+1,Matm_n)
 
+              if isAscending
+                (dx2,dy2) = _normal(nx,ny,INWARDS)
 
-                elseif isAscending==true
-                  @info " going up"
-                  j_wedge_top = j_wedge_top-1  # the direction of h is descending
-                  dx2 = -dx2
-                  dy2 = -dy2
-                else
-                  @info " going down"
-                  j_wedge_top = j_wedge_top+1  # the direction of h is ascending
-                end
-              elseif θ==θmax
-                @info "Touching left"
-                begin
-                  i_wedge_left = i_wedge_left+1
-                  i_wedge_right = i_wedge_left+1
-                  dx2 =  dy2
-                  dy2 = -tmp
-                end
-              elseif θ==θmin
-                @info "Touching right"
-                begin
-                  i_wedge_left = i_wedge_left-1
-                  dx2 = -dy2
-                  dy2 =  tmp
-                end
-              # something went wrong
               else
-                j_wedge_top = -2
+                (dx2,dy2) = _normal(nx,ny,OUTWARDS)
               end
-              # check i_index for periodic radial distribution
+            else
+              isAscending = !isAscending
+              @debug "switch"
+              @debug "Δs: $abs(s-s_target)"
+              #readline()
             end
-
-            # update indexes
-            begin
-              i_wedge_right = i_wedge_left+1
-              j_wedge_bottom = j_wedge_top+1
-              if IsPeriodic
-                i_wedge_left = mod1(i_wedge_left,Natm_n)
-                i_wedge_right = mod1(i_wedge_left+1,Natm_n)
-              end
-              i_wedge_left = i_wedge_left< N_atmn ? i_wedge_left : -1
-              i_wedge_right = i_wedge_right< N_atmn ? i_wedge_right : -1
-              j_wedge_top = j_wedge_top< Matm_n ? j_wedge_top : -1
-              j_wedge_bottom = j_wedge_bottom< Matm_n ? j_wedge_bottom : -1
-            end
-
-
-
-
-
+            #readline()
+            @debug "Post: (t,s) is $t and $s"
           end
+          @debug "isAscending is $isAscending"
+          @debug "abs(s-s_target)<1e-3 is $(abs(s-s_target)<1e-3)"
+          @debug "θ==θmax is $(θ==θmax)"
+          @debug "θ==θmin is $(θ==θmin)"
 
-          retrieval_i[idx_rays,iter+1]=i_wedge_left
-          retrieval_j[idx_rays,iter+1]=j_wedge_top
+          ## update position
+          px1 = _compute_ray_at__t(px1, dx1, t)
+          py1 = _compute_ray_at__t(py1, dy1, t)
+
+        end
+
+        if iter==1
+
+          i_wedge_right = findlast(atm_θ.<= θ)
+          j_wedge_top = 1
+          i_wedge_left= _update_index_i(i_wedge_right+1,Natm_n,IsPeriodic)
+          j_wedge_bottom = _update_index_j(j_wedge_top+1,Matm_n)
+          @debug "i: $i_wedge_right  i+1: $i_wedge_left"
+          @debug "j: $j_wedge_top   j+1: $j_wedge_bottom"
+        end
+        ###############################################################################
+        #  DEBUG
+        ###############################################################################
+        @debug "---------------------------------------------"
+        @debug "i is $i_wedge_right and j is $j_wedge_top"
+        @debug "t is $t"
+        @debug "theta is $θ"
+        @debug "s_previous: $s_old"
+        @debug "s_current: $s"
+        @debug  "p_previuous: $px1_current, $py1_current"
+        @debug "p_current: $px1, $py1"
+        @debug "d_previuous: $dx1_current, $dy1_current"
+        @debug "d_current: $dx1, $dy1"
+        @debug "i: $i_wedge_right and j: $j_wedge_top"
+        @debug "---------------------------------------------"
+        px1_current = px1
+        py1_current = py1
+        dx1_current = dx1
+        dy1_current = dy1
+
+        ###############################################################################
+
+        if _top_skip_condition(min(i_wedge_right,i_wedge_left),min(j_wedge_top,j_wedge_bottom),2) # avoid the first iteration
+          @debug "Ray $idx_rays is stopped"
+          @debug "i_wedge_right = $i_wedge_right and j_wedge_top = $j_wedge_top"
+
+          number_rays_stopped+=1
+          continue
         end
 
 
-        # check if atmosphere has been reached or if the ray has failed to intersect
         begin
-          # j_wedge_top is used as a flag in the code
-          # -2 means an error
-          # 0   means it left the atmosphere
-          # -1  means it reached the ground
-          if j_wedge_top<1 || i_wedge_left<1 || i_wedge_right<1
-
-            number_rays_stopped+=1
-
-            continue
-          end
-        end
-        # update the refractive index of the neighbor
-        begin
-          nₜ = atm_n[i_wedge_left,j_wedge_top]
-          θmin = atm_θ[i_wedge_left]
-          θmax = atm_θ[i_wedge_right]
-          s_top = atm_h[j_wedge_top]
-          s_bottom = atm_h[j_wedge_bottom]
-        end
-        ##################################################
-        # DEBUG
-        ##################################################
-        @info "--------------------------------------------------"
-        @info "Ray $(idx_rays) at $(iter) iteration"
-        @info "--------------------------------------------------"
-        @info "i_wedge_left=$(i_wedge_left) j_wedge_top=$(j_wedge_top)"
-        @info "i_wedge_right=$(i_wedge_right) j_wedge_bottom=$(j_wedge_bottom)"
-        @info "nₜ=$(nₜ) nₜ=$(nₜ)"
-        @info "θmin=$(θmin) θmax=$(θmax)"
-        @info "s_top=$(s_top) s_bottom=$(s_bottom)"
-        @info "px1=$(px1) py1=$(py1)"
-        @info "px2=$(px2) py2=$(py2)"
-        @info "dx1=$(dx1) dy1=$(dy1)"
-        @info "dx2=$(dx2) dy2=$(dy2)"
-        @info "t=$(t) s=$(s)"
-        @info "θ=$(θ)"
-        @info "isAscenging? $(isAscending)"
-        @info "--------------------------------------------------"
-        #return
-        ##################################################
-        # bending the ray
-        if !(nᵢ==nₜ) # do bend only if the refractive index are different
-          @info " --------------------------------------------------"
-          @info "Bending the ray"
-          @info " --------------------------------------------------"
-          let
-            # check if it is intersecting a level or a ray
-            # both directions are already normalized
+          @debug "------------- Bending the ray ---------------"
+          @debug "i: $i_wedge_right  i+1: $i_wedge_left"
+          @debug "j: $j_wedge_top   j+1: $j_wedge_bottom"
+          @debug "i_previous: $i_previous "
+          @debug "j_previous: $j_previous  j: $j_wedge_top"
+          @debug "j: $j_wedge_top   j+1: $j_wedge_bottom"
+          local nₜ = atm_n[i_wedge_right,j_wedge_top]
+          @debug "nₜ is $nₜ and nᵢ is $nᵢ"
+          if !(nᵢ==nₜ) # do bend only if the refractive index are different
+            local direction_x = dx1
+            local direction_y = dy1
+            local normal_x = dx2
+            local normal_y = dy2
             local n_incident = nᵢ
             local n_transmitted = nₜ
-            local direcion_ray_x=dx1
-            local direction_ray_y=dy1
-            local Nx=dx2
-            local Ny=dy2
-            local n01=n_incident/n_transmitted
-            local n01²=n01*n01
-            local cosθ_incident=-(Nx*direcion_ray_x+Ny*direction_ray_y)
-            local sinθ²_transmitted =n01²*(1-cosθ_incident*cosθ_incident)
-
-            # check if the ray is internally reflected
-            # this most likely happens if there is an issue with the atmosphere or if the tangent quote
-            # happens to be at a level.
-            if sinθ²_transmitted ≤ 1
-              dx1= n01*dx1+(n01*cosθ_incident-sqrt(1-sinθ²_transmitted))*Nx
-              dy1= n01*dy1+(n01*cosθ_incident-sqrt(1-sinθ²_transmitted))*Ny
-            else
-              dx1-=2*cosθ_incident*Nx
-              dy1-=2*cosθ_incident*Ny
-            end
-
+            (dx1,dy1) =_bend_ray!(direction_x,direction_y,normal_x,normal_y,n_incident,n_transmitted)
           end
-          @info " dx_new=$(dx1) dy_new=$(dy1)"
-
-          @info " --------------------------------------------------"
-
-
         end
-        # update the direction of the ray
         begin
           local norm_new_ray_direction = hypot(dx1, dy1)
           dx1 /= norm_new_ray_direction
           dy1 /= norm_new_ray_direction
           # first update the position using the array cause dx1,dy1 are already modified
-          apx[idx_rays] = px1+t*adx[idx_rays]
-          apy[idx_rays] = py1+t*ady[idx_rays]
-          px1=apx[idx_rays]
-          py1=apy[idx_rays]
+          apx[idx_rays] = px1
+          apy[idx_rays] = py1
           adx[idx_rays] = dx1
           ady[idx_rays] = dy1
           t_out[idx_rays] = t
           θ_out[idx_rays] = θ
           # set up next iteration
-          s_out[idx_rays] = isAscending ? s_top : s_bottom
-          aθmin[idx_rays] = θmin
-          aθmax[idx_rays] = θmax
-          incident_refractive_index[idx_rays]  = nₜ
+          s_out[idx_rays] = s
+          @debug "i is $i_wedge_right  i+1 is $i_wedge_left"
+          @debug "j is $j_wedge_top  j+1 is $j_wedge_bottom"
+          aθmin[idx_rays] = atm_θ[i_wedge_right]
+          aθmax[idx_rays] = atm_θ[i_wedge_left]
+          @debug "θmin is $(aθmin[idx_rays]) and θmax is $(aθmax[idx_rays])"
+          incident_refractive_index[idx_rays]  = atm_n[i_wedge_right,j_wedge_top]
           ascending[idx_rays] = isAscending
 
         end
@@ -696,17 +624,68 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
         # update output arrays
         begin
           # fill the retrieval output for the current iteration
-          retrieval_i[idx_rays,iter+1]=i_wedge_left
+          retrieval_i[idx_rays,iter+1]=i_wedge_right
           retrieval_j[idx_rays,iter+1]=j_wedge_top
           retrieval_θ[idx_rays,iter+1]=θ
           retrieval_t[idx_rays,iter+1]=t
           retrieval_h[idx_rays,iter+1]=s
+          retrieval_n[idx_rays,iter+1]=incident_refractive_index[idx_rays]
+          retrieval_px[idx_rays,iter+1]=px1
+          retrieval_py[idx_rays,iter+1]=py1
+          retrieval_dx[idx_rays,iter+1]=dx1
+          retrieval_dy[idx_rays,iter+1]=dy1
+          current_quote_tangent = max(0,min(current_quote_tangent,s))  #update tangent quote
+          tangent_quote[idx_rays] = current_quote_tangent
+          @debug "current_quote_tangent is $current_quote_tangent"
+          @debug "s is $s"
+          @debug "i is $i_wedge_right and j is $j_wedge_top"
+          @debug "t is $t"
+          @debug "---------------------------------------------"
 
         end
     end
+
     # early stop condition
     if number_rays_stopped == NumRays
       break
     end
   end
+end
+
+
+
+function limb_angle(w,z,ang)
+   θ = atan(z/w)
+  (tx,ty)=(z,-w)|> x-> x./hypot(x...) .*-1.0
+  #################################
+  angle= ang*-1
+
+  dir=_rotation_matrix(angle)*[tx,ty]
+  return (dir[1],dir[2])
+end
+
+function nadir_angle(w,z,ang)
+   θ = atan(z/w)
+  (nx,ny)=(-w,-z)|> x-> x./hypot(x...) .*-1.0
+  #################################
+  angle= ang
+
+  dir=_rotation_matrix(angle)*[nx,ny]
+  return (dir[1],dir[2])
+end
+
+function nadir_angle_normal(nx,ny,ang;outward::Bool=true)
+  inwardoutward = outward ? 1.0 : -1.0
+  (nx,ny)=(nx,ny)|> x-> x./hypot(x...) .*inwardoutward
+ #################################
+ angle= ang
+
+ dir=_rotation_matrix(angle)*[nx,ny]
+ return (dir[1],dir[2])
+end
+
+figure=Figure()
+ax = Axis(figure[1,1])
+for h in eachrow(test_retrieval.h[:,1:73])
+  lines!(ax,h.*major_axis_earth)
 end

@@ -1,6 +1,6 @@
 # load packages
 using Base: IEEEFloat
-using Makie,WGLMakie
+using Makie,CairoMakie
 using CoordRefSystems # for information on earth
 
 using MacroTools

@@ -189,13 +189,13 @@ function initialize_theta(θin::T,px::T,py::T;ϵ=1e-2,kmax_init::Int=30)::T wher
       end
       if abs(f-fold)<ϵ
         hasconverged = true
-        @info "Converged after $k iterations with Δf: $(abs(f-fold))"
-        return θ
+        #@info "Converged after $k iterations with Δf: $(abs(f-fold))"
+        #return θ
       end
       fold=f
     end
   end
-  @info "Did not converged after $kmax_init iterations with Δf: $(abs(f-fold))"
+  #@info "Did not converged after $kmax_init iterations with Δf: $(abs(f-fold))"
   return θ
 
 end
@@ -654,6 +654,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,a
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -693,6 +694,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,a
           fold = f
         end
       end
+      return nothing
       #   step block 2
       begin
         # update k ← k + 1
@@ -754,6 +756,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,a
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -854,6 +857,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,a
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -954,6 +958,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,a
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -1054,6 +1059,8 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,a
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+
+          #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -1371,9 +1378,9 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
 
   max_altitude=atm_h[1]
 
-  @info "Starting the ray tracing"
-  @info "max_altitude is $max_altitude"
-  @info " extrema of atm_h is $(minimum(atm_h)) and $(maximum(atm_h))"
+  #@info "Starting the ray tracing"
+  #@info "max_altitude is $max_altitude"
+  #@info " extrema of atm_h is $(minimum(atm_h)) and $(maximum(atm_h))"
 
   rho_max = T(50)
   kloops = div(kmax,5, RoundUp) #Internal loop of the Newton method
@@ -1383,7 +1390,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
     # internal loop of ray tracing
       #@batch for idx_rays in eachindex(t_out)
       for idx_rays in eachindex(t_out)
-        @info "Ray $idx_rays and iteration $iter"
+        #@info "Ray $idx_rays and iteration $iter"
         # first iteration is diffent from the rest
         # I need to set the initial value of theta
         # and find the initial wedge, also all incident refractive index are 1
@@ -1416,11 +1423,11 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
           s_bottom = atm_h[j_wedge_plus_1]
         end
 
-        @info "---------------------------------------------"
-        @info " try to minimize towards $s "
-        @info " top $(s_top) and bottom$(s_bottom))"
-        @info " isAscending is $isAscending"
-        @info "---------------------------------------------"
+        #@info "---------------------------------------------"
+        #@info " try to minimize towards $s "
+        #@info " top $(s_top) and bottom$(s_bottom))"
+        #@info " isAscending is $isAscending"
+        #@info "---------------------------------------------"
 
 
         retrieval_px[idx_rays,iter]=px1
@@ -1599,8 +1606,189 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
             # set f-> fold
             fold = f
           end
-          # Newton loop
 
+                      begin
+              # update k ← k + 1
+              # compute new θ
+              begin
+                # trigonometric function needed for computing the gradient and hessian
+                begin
+                  sinθ² = sinθ * sinθ
+                  half_sin2θ = sinθ * cosθ
+                  cos2θ = cosθ² - sinθ²
+                end
+                # compute the gradient
+                begin
+                  begin
+                    dpx2dθ = -sinθ
+                    dpy2dθ = bcosθ
+                    ddx2dθ_0 = -bsinθ
+                    ddy2dθ_0 = cosθ
+                  end
+                  begin
+                    half_dR = e² * half_sin2θ
+                    half_dR² = half_dR * half_dR
+                    half_d²R = e² * cos2θ
+                    N² = N * N
+                    dNdθ = -half_dR
+                    d²Ndθ² = -half_d²R + 3 * N² * half_dR²
+                    ddx2dθ = (ddx2dθ_0 + N² * dNdθ * dx2) * N
+                    ddy2dθ = (ddy2dθ_0 + N² * dNdθ * dy2) * N
+                  end
+                  begin
+                    dFxdθ = dpx2dθ + s * ddx2dθ
+                    dFydθ = dpy2dθ + s * ddy2dθ
+                    dtdθ = dx1 * dFxdθ + dy1 * dFydθ
+                    dPxdθ = dx1 * dtdθ
+                    dPydθ = dy1 * dtdθ
+                    dfxdθ = dFxdθ - dPxdθ
+                    dfydθ = dFydθ - dPydθ
+                  end
+                  g = fx * dfxdθ + fy * dfydθ
+                end
+                # compute the hessian
+                begin
+                  begin
+                    d²px2dθ² = -px2
+                    d²py2dθ² = -py2
+                    d²dx2dθ²_0 = -dx2
+                    d²dy2dθ²_0 = -dy2
+                  end
+                  begin
+                    d²dx2dθ² = (d²dx2dθ²_0 + (2 * ddx2dθ_0 * dNdθ + d²Ndθ² * N² * dx2) * N²) * N
+                    d²dy2dθ² = (d²dy2dθ²_0 + (2 * ddy2dθ_0 * dNdθ + d²Ndθ² * N² * dy2) * N²) * N
+                    d²Fxdθ² = d²px2dθ² + d²dx2dθ²
+                    d²Fydθ² = d²py2dθ² + d²dy2dθ²
+                  end
+                  begin
+                    d²tdθ² = dx1 * d²Fxdθ² + dy1 * d²Fydθ²
+                    d²Pxdθ² = dx1 * d²tdθ²
+                    d²Pydθ² = dy1 * d²tdθ²
+                    dfxdθ_squared = dfxdθ * dfxdθ
+                    dfydθ_squared = dfydθ * dfydθ
+                    d²fxdθ² = d²Fxdθ² - d²Pxdθ²
+                    d²fydθ² = d²Fydθ² - d²Pydθ²
+                  end
+                  h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
+                  # insure positive definess of the hessian by adding a const
+                  # similar to how LDLT works to ensure positive definiteness of matrix
+                  h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
+                end
+                # penality for negative t
+                begin
+                  penality_t = 0
+                  g_t = 0
+                  h_t = 0
+                  if t < 0
+                    t² = t * t
+                    penality_t = -rho * t*t²
+                    g_t= -3t²*dtdθ
+                    h_t = -t²*d²tdθ²-6t*dtdθ*dtdθ
+                    g_t*=rho
+                    h_t*=rho
+                  end
+                  f_with_penality = f + penality_t
+
+                  g += g_t
+                  h += h_t
+
+
+
+                end
+
+begin
+  local N₀=N
+  local N₀² =N²
+local ∂N∂θ = dNdθ
+local ∂²N∂θ² = d²Ndθ²
+local ∂Px∂θ = dPxdθ
+local ∂Py∂θ = dPydθ
+local ∂Fx∂θ = dFxdθ
+local ∂Fy∂θ = dFydθ
+local ∂fx∂θ = dfxdθ
+local ∂fy∂θ = dfydθ
+local ∂²Px∂θ² = d²Pxdθ²
+local ∂²Py∂θ² = d²Pydθ²
+local ∂²Fx∂θ² = d²Fxdθ²
+local ∂²Fy∂θ² = d²Fydθ²
+local ∂²fx∂θ² = d²fxdθ²
+local ∂²fy∂θ² = d²fydθ²
+local g_step = g
+local h_step = h
+            #@info s
+            #@info ddx2dθ_0
+            #@info N² * dNdθ * dx2
+
+            #@info "∂Fx∂θ $∂Fx∂θ"
+            #@info "∂Fy∂θ $∂Fy∂θ"
+            return
+            #@info "∂fx∂θ $∂fx∂θ"
+            #@info "∂fy∂θ $∂fy∂θ"
+            #@info "∂²Px∂θ² $∂²Px∂θ²"
+            #@info "∂²Py∂θ² $∂²Py∂θ²"
+            #@info "∂²Fx∂θ² $∂²Fx∂θ²"
+            #@info "∂²Fy∂θ² $∂²Fy∂θ²"
+            #@info "∂²fx∂θ² $∂²fx∂θ²"
+            #@info "∂²fy∂θ² $∂²fy∂θ²"
+            #@info "g_step $g_step"
+            #@info "h_step $h_step"
+
+            #@info "p_step $(-g/h)"
+            #return
+end
+                # compute the newton step
+                p = -g / h
+                # compute next θ
+                θ = mod2pi(θ + p)
+
+                #@info "p_newton is $p  θ is $θ  t is $t"
+              end
+              # compute new (f,t)
+              begin
+                begin
+                  cosθ = cos(θ)
+                  sinθ = sin(θ)
+                  bcosθ = b_normalized * cosθ
+                  bsinθ = b_normalized * sinθ
+                  cosθ² = cosθ * cosθ
+                end
+                begin
+                  R = 1 - e² * cosθ²
+                  N = 1 / sqrt(R)
+                  px2 = cosθ
+                  py2 = bsinθ
+                  dx2 = bcosθ
+                  dy2 = sinθ
+                  Fx = px2 + s * dx2 * N
+                  Fy = py2 + s * dy2 * N
+                end
+                t = -origin_times_direction + (dx1 * Fx + dy1 * Fy)
+                begin
+                  Px = px1 + t * dx1
+                  Py = py1 + t * dy1
+                end
+                begin
+                  fx = Fx - Px
+                  fy = Fy - Py
+                  f = fx * fx + fy * fy
+                end
+              end
+              # stopping criteria and update fold ← f
+              begin
+
+
+
+                if abs(f-fold) < δ && (penality_t==0)
+
+                    break
+                end
+
+                fold = f
+              end
+            end
+
+          # Newton loop
+          #@info "Starting the Newton loop θ0 is $θ"
           for k in 1:kloops
 
             ############################
@@ -1702,10 +1890,37 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
 
 
                 end
+
+
+                #@info "e²: $e²  θ: $θ cosθ^2: $(cos(θ)^2) R₀: $(1-e² * cos(θ)^2)"
+                #@info "N₀  $N"
+                #@info "∂Nx∂θ $(dNdθ*N²)"
+                #@info "∂²Nx∂θ² $(d²Ndθ² * N² * N²)"
+                #@info "∂²Nx∂θ² $dPxdθ"
+                #@info "∂Px∂θ $dPxdθ"
+                #@info "∂Py∂θ $dPydθ"
+                #@info "∂Fx∂θ $dFxdθ"
+                #@info "∂Fy∂θ $dFydθ"
+                #@info "∂fx∂θ $dfxdθ"
+                #@info "∂fy∂θ $dfydθ"
+                #@info "∂²Px∂θ² $d²Pxdθ²"
+                #@info "∂²Py∂θ² $d²Pydθ²"
+                #@info "∂²Fx∂θ² $d²Fxdθ²"
+                #@info "∂²Fy∂θ² $d²Fydθ²"
+                #@info "∂²fx∂θ² $d²fxdθ²"
+                #@info "∂²fy∂θ² $d²fydθ²"
+                #@info "g_step $g"
+                #@info "h_step $h"
+                #@info "p_step $(-g/h)"
+                #return
+
+
                 # compute the newton step
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -1767,8 +1982,8 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
                   begin
                     dpx2dθ = -sinθ
                     dpy2dθ = bcosθ
-                    dpx2dθ_0 = -bsinθ
-                    dpy2dθ_0 = cosθ
+                    ddx2dθ_0 = -bsinθ
+                    ddy2dθ_0 = cosθ
                   end
                   begin
                     half_dR = e² * half_sin2θ
@@ -1777,8 +1992,8 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
                     N² = N * N
                     dNdθ = -half_dR
                     d²Ndθ² = -half_d²R + 3 * N² * half_dR²
-                    ddx2dθ = (dpx2dθ_0 + N² * dNdθ * dx2) * N
-                    ddy2dθ = (dpy2dθ_0 + N² * dNdθ * dy2) * N
+                    ddx2dθ = (ddx2dθ_0 + N² * dNdθ * dx2) * N
+                    ddy2dθ = (ddy2dθ_0 + N² * dNdθ * dy2) * N
                   end
                   begin
                     dFxdθ = dpx2dθ + s * ddx2dθ
@@ -1841,6 +2056,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -1975,6 +2191,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -2109,6 +2326,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -2243,6 +2461,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -2352,6 +2571,12 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
 
         # find new index_i and index_j as well as the neighbors refractive index
 
+        #@info "pre: t is $t  s: $s θ: $θ"
+        #@info "px1: $px1, py1: $py1, px2: $px2, py2: $py2"
+        #@info "dx1: $dx1, dy1: $dy1, dx2: $dx2, dy2: $dy2"
+        #return (px1, py1, px2, py2, dx1, dy1, dx2, dy2, θ, t, s)
+
+        ###############
         begin
           if iter==1 && initialized==false
             # find the index of the wedge using binary search
@@ -2369,21 +2594,21 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
 
 
           else
-            @info "--------------------------------------------------"
-            @info "  θ   : $(rad2deg(θ))°  "
-            @info "  θmin: $(rad2deg(θmin))°  "
-            @info "  θmax: $(rad2deg(θmax))°  "
-            @info "  Δh  : $(f)  "
-            @info "  s_top: $(s_top)  "
-            @info "  s_bottom: $(s_bottom)  "
-            @info "  s  : $(s)  "
-            @info "--------------------------------------------------"
+            #@info "--------------------------------------------------"
+            #@info "  θ   : $(rad2deg(θ))°  "
+            #@info "  θmin: $(rad2deg(θmin))°  "
+            #@info "  θmax: $(rad2deg(θmax))°  "
+            #@info "  Δh  : $(f)  "
+            #@info "  s_top: $(s_top)  "
+            #@info "  s_bottom: $(s_bottom)  "
+            #@info "  s  : $(s)  "
+            #@info "--------------------------------------------------"
             begin
               local tmp = dx2
               if  θmin<θ<θmax
-                @info "Between 2 wedges"
+                #@info "Between 2 wedges"
                 if  (abs(f)>10^-5 && isAscending==false)
-                    @info " in the middle of the atmosphere"
+                    #@info " in the middle of the atmosphere"
                     tangent_quote[idx_rays]=s
                     isAscending = true
                     # assume left handiness
@@ -2431,16 +2656,16 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
 
 
                 elseif isAscending==true
-                  @info " going up"
+                  #@info " going up"
                   j_wedge = j_wedge-1  # the direction of h is descending
                   dx2 = -dx2
                   dy2 = -dy2
                 else
-                  @info " going down"
+                  #@info " going down"
                   j_wedge = j_wedge+1  # the direction of h is ascending
                 end
               elseif θ==θmax
-                @info "Touching left"
+                #@info "Touching left"
                 begin
                   i_wedge = i_wedge+1
                   i_wedge_plus_1 = i_wedge+1
@@ -2448,7 +2673,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
                   dy2 = -tmp
                 end
               elseif θ==θmin
-                @info "Touching right"
+                #@info "Touching right"
                 begin
                   i_wedge = i_wedge-1
                   dx2 = -dy2
@@ -2510,29 +2735,29 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
         ##################################################
         # DEBUG
         ##################################################
-        @info "--------------------------------------------------"
-        @info "Ray $(idx_rays) at $(iter) iteration"
-        @info "--------------------------------------------------"
-        @info "i_wedge=$(i_wedge) j_wedge=$(j_wedge)"
-        @info "i_wedge_plus_1=$(i_wedge_plus_1) j_wedge_plus_1=$(j_wedge_plus_1)"
-        @info "nₜ=$(nₜ) nₜ=$(nₜ)"
-        @info "θmin=$(θmin) θmax=$(θmax)"
-        @info "s_top=$(s_top) s_bottom=$(s_bottom)"
-        @info "px1=$(px1) py1=$(py1)"
-        @info "px2=$(px2) py2=$(py2)"
-        @info "dx1=$(dx1) dy1=$(dy1)"
-        @info "dx2=$(dx2) dy2=$(dy2)"
-        @info "t=$(t) s=$(s)"
-        @info "θ=$(θ)"
-        @info "isAscenging? $(isAscending)"
-        @info "--------------------------------------------------"
+        #@info "--------------------------------------------------"
+        #@info "Ray $(idx_rays) at $(iter) iteration"
+        #@info "--------------------------------------------------"
+        #@info "i_wedge=$(i_wedge) j_wedge=$(j_wedge)"
+        #@info "i_wedge_plus_1=$(i_wedge_plus_1) j_wedge_plus_1=$(j_wedge_plus_1)"
+        #@info "nₜ=$(nₜ) nₜ=$(nₜ)"
+        #@info "θmin=$(θmin) θmax=$(θmax)"
+        #@info "s_top=$(s_top) s_bottom=$(s_bottom)"
+        #@info "px1=$(px1) py1=$(py1)"
+        #@info "px2=$(px2) py2=$(py2)"
+        #@info "dx1=$(dx1) dy1=$(dy1)"
+        #@info "dx2=$(dx2) dy2=$(dy2)"
+        #@info "t=$(t) s=$(s)"
+        #@info "θ=$(θ)"
+        #@info "isAscenging? $(isAscending)"
+        #@info "--------------------------------------------------"
         #return
         ##################################################
         # bending the ray
         if !(nᵢ==nₜ) # do bend only if the refractive index are different
-          @info " --------------------------------------------------"
-          @info "Bending the ray"
-          @info " --------------------------------------------------"
+          #@info " --------------------------------------------------"
+          #@info "Bending the ray"
+          #@info " --------------------------------------------------"
           let
             # check if it is intersecting a level or a ray
             # both directions are already normalized
@@ -2559,9 +2784,9 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
             end
 
           end
-          @info " dx_new=$(dx1) dy_new=$(dy1)"
+          #@info " dx_new=$(dx1) dy_new=$(dy1)"
 
-          @info " --------------------------------------------------"
+          #@info " --------------------------------------------------"
 
 
         end
@@ -2605,135 +2830,3 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady:
     end
   end
 end
-
-
-# Test Ray Traced
-nrays= 10
-niterations=30
-
-@inline _rotation_matrix(θ)= [cosd(θ) sind(θ);-sind(θ) cosd(θ)]
-
-function limb_angle(w,z,ang)
-   θ = atan(z/w)
-  (tx,ty)=(z,-w)|> x-> x./hypot(x...) .*-1.0
-  #################################
-  angle= ang*-1
-
-  dir=_rotation_matrix(angle)*[tx,ty]
-  return (dir[1],dir[2])
-end
-
-function nadir_angle(w,z,ang)
-   θ = atan(z/w)
-  (nx,ny)=(-w,-z)|> x-> x./hypot(x...) .*-1.0
-  #################################
-  angle= ang
-
-  dir=_rotation_matrix(angle)*[nx,ny]
-  return (dir[1],dir[2])
-end
-
-function nadir_angle_normal(nx,ny,ang;outward::Bool=true)
-  inwardoutward = outward ? 1.0 : -1.0
-  (nx,ny)=(nx,nx)|> x-> x./hypot(x...) .*inwardoutward
- #################################
- angle= ang
-
- dir=_rotation_matrix(angle)*[nx,ny]
- return (dir[1],dir[2])
-end
-
-
-limb_angle(5,2,65)
-θ_limb=70
-begin
-  θ_out = zeros(Float64,nrays)
-  t_out = similar(θ_out)
-  s_out = similar(θ_out)
-  aθmin = similar(θ_out)
-  aθmax = similar(θ_out)
-  apx   = ones(Float64,nrays).*1.8
-  apy   = ones(Float64,nrays).*2
-  if nrays>2
-    dir_ang=[limb_angle(5,2,θ_limb+deg2rad(shift)) for shift in LinRange(-5,5,nrays)]
-  else
-    dir_ang=[limb_angle(5,2,θ_limb)]
-  end
-  adx   = [x for (x,_) in dir_ang]
-  ady   = [y for (_,y) in dir_ang]
-
-  incident_refractive_index = ones(Float64,nrays)
-  adx
-  ascending = [false for _ in 1:nrays]
-  incident_refractive_index = ones(Float64,nrays)
-  retrieval_i = zeros(Int,nrays,niterations+1)
-  retrieval_j = similar(retrieval_i)
-  retrieval_θ = zeros(Float64,nrays,niterations+1)
-  retrieval_t = similar(retrieval_θ)
-  retrieval_h = similar(retrieval_θ)
-  retrieval_n = similar(retrieval_θ)
-  retrieval_px = similar(retrieval_θ)
-  retrieval_py = similar(retrieval_θ)
-  retrieval_dx = similar(retrieval_θ)
-  retrieval_dy = similar(retrieval_θ)
-  tangent_quote = similar(θ_out)
-  M=20
-  N=180
-  N_atmn= N
-  M_atmn= M-1
-  atm_h = [ exp(-x) for x in LinRange(0,3,M)]
-  atm_θ = [ θ for θ in LinRange(0,2π,N+1)][1:end-1]
-  atm_n = ones(Float64,N_atmn,M_atmn)
-  M_atmn
-  n_horizontal = 1.0.+0.00027.*(1.0.-atm_h[1:end-1])
-  n_vertical = @. sin(atm_θ[1:end])*0.0000
-  atm_n[:,:]=repeat(n_horizontal',N_atmn,1)
-  atm_n[:,:]+=repeat(n_vertical,1,M_atmn)
-end
-
-fast_ray_tracing!(t_out,θ_out,s_out,
-  apx,apy,adx,ady,
-  incident_refractive_index,
-  aθmin,aθmax,ascending,
-  atm_n,atm_θ,atm_h,
-  retrieval_i,retrieval_j,
-  retrieval_n,retrieval_θ,
-  retrieval_t,retrieval_h,
-  retrieval_px,retrieval_py,
-  retrieval_dx,retrieval_dy,
-  tangent_quote)
-
-
-
-  @benchmark fast_ray_tracing!($t_out,$θ_out,$s_out,
-  $apx,$apy,$adx,$ady,
-  $incident_refractive_index,
-  $aθmin,$aθmax,$ascending,
-  $atm_n,$atm_θ,$atm_h,
-  $retrieval_i,$retrieval_j,
-  $retrieval_n,$retrieval_θ,
-  $retrieval_t,$retrieval_h,
-  $retrieval_px,$retrieval_py,
-  $retrieval_dx,$retrieval_dy,
-  $tangent_quote)
-
-begin
-  b=get_minoraxis()
-  e²=1-b*b
-  ray(px,py,dx,dy,t)=(px,py).+(t*dx,t*dy)
-  ellipse(θ,h)=(cos(θ),b*sin(θ)).+h.*(b*cos(θ),sin(θ))./sqrt(1-e²*cos(θ)*cos(θ))
-  figure=Figure()
-  ax=Axis(figure[1,1])
-
-  for (px_step,py_step,dx_step,dy_step,t_step) in zip(retrieval_px[1:10,1:end-1],retrieval_py[1:10,1:end-1],retrieval_dx[1:10,1:end-1],retrieval_dy[1:end-1],  retrieval_t[1:10,2:end])
-    tpass=0
-    for (px,py,dx,dy,t) in zip(px_step,py_step,dx_step,dy_step,t_step)
-        scatterlines!(ax,[ray(px,py,dx,dy,t) for t in (0,t)])
-    end
-  end
-  lines!(ax,[ellipse(θ,h) for θ in LinRange(0,2pi+0.001,1000), h in atm_h][:],color="red")
-  for θ in atm_θ
-    lines!(ax,[ellipse(θ,h) for h in (0,1)][:],color="red")
-  end
-end
-figure
