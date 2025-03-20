@@ -85,9 +85,9 @@ end
 
 @inline function _clampθ(θ::T,θmin::T,θmax::T)::T where T
   # simple case
-  @info "θmin: $(θmin) θ: $θ  θmax: $(θmax)"
+  @debug "θmin: $(θmin) θ: $θ  θmax: $(θmax)"
   θmin<=θmax && return clamp(θ,θmin,θmax)
-  @info " [θmin,2pi) U [0,θmax]"
+  @debug " [θmin,2pi) U [0,θmax]"
   θ>θmin || θ<θmax && return θ
   local distance_from_theta_min = mod(θ - θmin, 2π)
   local distance_from_theta_max = mod(θmax - θ, 2π)
@@ -149,9 +149,9 @@ end
 @inline _compute_ray_at__t(point_i, direction_i, t_i) = point_i + t_i * direction_i
 @inline function _top_skip_condition(i::Int, j::Int,iter::Int)
   iter==1    &&    return false # skip the first iteration
-  @info "iter greater than 1"
+  @debug "iter greater than 1"
   (j>0 || i>0) && return false # if any of the index is negative, return false
-  @info "iter greater than 1 and j or i are negative"
+  @debug "iter greater than 1 and j or i are negative"
   return true
 end
 
@@ -265,14 +265,14 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
   local number_rays_stopped=0
   local max_altitude=atm_h[1]
 
-  @info "Starting the ray tracing"
-  @info "max_altitude is $max_altitude"
-  @info " extrema of atm_h is $(minimum(atm_h)) and $(maximum(atm_h))"
+  @debug "Starting the ray tracing"
+  @debug "max_altitude is $max_altitude"
+  @debug " extrema of atm_h is $(minimum(atm_h)) and $(maximum(atm_h))"
 
   @inbounds for iter in 1:iter_eff
     for idx_rays in eachindex(t_out)
-      @info "######################################"
-      @info "Ray $idx_rays and iteration $iter"
+      @debug "######################################"
+      @debug "Ray $idx_rays and iteration $iter"
 
         #######################################
         # Initialize local variables
@@ -328,9 +328,9 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
         local is_s_top  = s_top*isAscending
         local is_s_bottom = s_bottom*!isAscending
 
-        @info "s: $s s_top : $is_s_top is s bottom : $is_s_bottom   isAscending: $isAscending"
+        @debug "s: $s s_top : $is_s_top is s bottom : $is_s_bottom   isAscending: $isAscending"
         local s_target  = iter           > 1 ? s_top*isAscending+ s_bottom*!isAscending : max_altitude
-        @info "s_target: $s_target  $(is_s_top+is_s_bottom)"
+        @debug "s_target: $s_target  $(is_s_top+is_s_bottom)"
 
         local current_quote_tangent = iter >1 ? tangent_quote[idx_rays] : T(Inf)
         local θ_old = θ
@@ -354,14 +354,14 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
 
         #################################################
         # DEBUG
-        @info "---------------------------------------------"
-        @info " try to minimize towards $s_target "
-        @info " top $(s_top) and bottom$(s_bottom))"
-        @info "j_wedge_top   : $j_wedge_top     s_top: $(s_top)"
-        @info "j_wedge_bottom: $j_wedge_bottom  s_bottom: $(s_bottom)"
+        @debug "---------------------------------------------"
+        @debug " try to minimize towards $s_target "
+        @debug " top $(s_top) and bottom$(s_bottom))"
+        @debug "j_wedge_top   : $j_wedge_top     s_top: $(s_top)"
+        @debug "j_wedge_bottom: $j_wedge_bottom  s_bottom: $(s_bottom)"
 
-        @info " isAscending is $isAscending"
-        @info "---------------------------------------------"
+        @debug " isAscending is $isAscending"
+        @debug "---------------------------------------------"
         #################################################
 
         local px1_current = px1
@@ -413,7 +413,7 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
 
           θ_old = θ
             # Newton loop
-          @info "Starting the Newton loop θ0 is $θ"
+          @debug "Starting the Newton loop θ0 is $θ"
           for k_iter in 1:kmax
               p_newton =  corrected_compute_newtop_step(s_target, dx1, dy1, px2, dy2, Fx,Fy,Px,Py, b_normalized,e²,N₀ )
 
@@ -429,15 +429,15 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
               fy= Fy - Py
               f = sqrt(_distance²(fx,fy))
 
-              #@info "p_newton is $p_newton  θ is $θ  t is $t"
+              #@debug "p_newton is $p_newton  θ is $θ  t is $t"
 
 
 
               if abs(f-fold)<δ  && abs(θ-θ_old)<δ
-                @info "Convergence reached in $k_iter iterations"
-                @info "f is $f and fold is $fold"
-                @info "θ is $θ and θold id $θ_old"
-                @info "θ is $θ and θold id $θ_previous"
+                @debug "Convergence reached in $k_iter iterations"
+                @debug "f is $f and fold is $fold"
+                @debug "θ is $θ and θold id $θ_old"
+                @debug "θ is $θ and θold id $θ_previous"
                 break
               end
               fold = f
@@ -460,17 +460,17 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
           # 2. check if it is in the bounds of θmin and θmax
           dx2=N₀*dx2
           dy2=N₀*dy2
-          @info "(t,s) $(t), $(s)"
+          @debug "(t,s) $(t), $(s)"
           θ=_clampθ(θ,θmin,θmax)
 
-          @info "Pre (t,s) $(t), $(s)"
-            @info "s: $s s_target $s_target Δs: $(s-s_target)"
+          @debug "Pre (t,s) $(t), $(s)"
+            @debug "s: $s s_target $s_target Δs: $(s-s_target)"
           (t,s) = _interception_two_rays(px1,py1,px2,py2,dx1,dx2,dy1,dy2)
 
-          @info "Post (t,s) $(t), $(s)"
-            @info "s: $s s_target $s_target Δs: $(s-s_target)"
+          @debug "Post (t,s) $(t), $(s)"
+            @debug "s: $s s_target $s_target Δs: $(s-s_target)"
           if (θ==θ_previous && t==0)
-            @info "θ is the same"
+            @debug "θ is the same"
 
             isAscending = !isAscending
 
@@ -482,30 +482,30 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
             (px2,py2,dx2,dy2,N₀) = _update_earth_ray(θ,b_normalized,e²,ϵ)
             dx2*=N₀
             dy2*=N₀
-            @info "Pre: (t,s) is $t and $s"
-            @info "s: $s_target: $s_target Δs: $(s-s_target)"
+            @debug "Pre: (t,s) is $t and $s"
+            @debug "s: $s_target: $s_target Δs: $(s-s_target)"
 
             if θ==θmax
-              @info "θ=θmax"
+              @debug "θ=θmax"
               i_wedge_right = _update_index_i(i_wedge_right+1,Natm_n,IsPeriodic)
               i_wedge_left  = _update_index_i(i_wedge_right+1,Natm_n,IsPeriodic)
 
-              @info " nx: $dx2 ny: $dy2"
+              @debug " nx: $dx2 ny: $dy2"
               (dx2,dy2) = _tangent(nx,ny,CLOCKWISE)
 
-              @info " tx: $dx2 ty: $dy2"
+              @debug " tx: $dx2 ty: $dy2"
             elseif θ==θmin
 
-              @info "θ=θmin"
+              @debug "θ=θmin"
 
-              @info " nx: $dx2 ny: $dy2 tx: $(-dy2) ty: $(dx2)"
+              @debug " nx: $dx2 ny: $dy2 tx: $(-dy2) ty: $(dx2)"
               i_wedge_right = _update_index_i(i_wedge_right-1,Natm_n,IsPeriodic)
               i_wedge_left = _update_index_i( i_wedge_right+1,Natm_n,IsPeriodic)
 
               (dx2,dy2) = _tangent(nx,ny,COUNTCLOCKWISE)
             elseif abs(s-s_target)<10*δ
 
-              @info "new_level"
+              @debug "new_level"
               j_step = isAscending ? -1 : 1
               j_wedge_top = _update_index_j(j_wedge_top+j_step,Matm_n)
               j_wedge_bottom = _update_index_j(j_wedge_top+1,Matm_n)
@@ -518,17 +518,17 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
               end
             else
               isAscending = !isAscending
-              @info "switch"
-              @info "Δs: $abs(s-s_target)"
+              @debug "switch"
+              @debug "Δs: $abs(s-s_target)"
               #readline()
             end
             #readline()
-            @info "Post: (t,s) is $t and $s"
+            @debug "Post: (t,s) is $t and $s"
           end
-          @info "isAscending is $isAscending"
-          @info "abs(s-s_target)<1e-3 is $(abs(s-s_target)<1e-3)"
-          @info "θ==θmax is $(θ==θmax)"
-          @info "θ==θmin is $(θ==θmin)"
+          @debug "isAscending is $isAscending"
+          @debug "abs(s-s_target)<1e-3 is $(abs(s-s_target)<1e-3)"
+          @debug "θ==θmax is $(θ==θmax)"
+          @debug "θ==θmin is $(θ==θmin)"
 
           ## update position
           px1 = _compute_ray_at__t(px1, dx1, t)
@@ -542,24 +542,24 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
           j_wedge_top = 1
           i_wedge_left= _update_index_i(i_wedge_right+1,Natm_n,IsPeriodic)
           j_wedge_bottom = _update_index_j(j_wedge_top+1,Matm_n)
-          @info "i: $i_wedge_right  i+1: $i_wedge_left"
-          @info "j: $j_wedge_top   j+1: $j_wedge_bottom"
+          @debug "i: $i_wedge_right  i+1: $i_wedge_left"
+          @debug "j: $j_wedge_top   j+1: $j_wedge_bottom"
         end
         ###############################################################################
         #  DEBUG
         ###############################################################################
-        @info "---------------------------------------------"
-        @info "i is $i_wedge_right and j is $j_wedge_top"
-        @info "t is $t"
-        @info "theta is $θ"
-        @info "s_previous: $s_old"
-        @info "s_current: $s"
-        @info  "p_previuous: $px1_current, $py1_current"
-        @info "p_current: $px1, $py1"
-        @info "d_previuous: $dx1_current, $dy1_current"
-        @info "d_current: $dx1, $dy1"
-        @info "i: $i_wedge_right and j: $j_wedge_top"
-        @info "---------------------------------------------"
+        @debug "---------------------------------------------"
+        @debug "i is $i_wedge_right and j is $j_wedge_top"
+        @debug "t is $t"
+        @debug "theta is $θ"
+        @debug "s_previous: $s_old"
+        @debug "s_current: $s"
+        @debug  "p_previuous: $px1_current, $py1_current"
+        @debug "p_current: $px1, $py1"
+        @debug "d_previuous: $dx1_current, $dy1_current"
+        @debug "d_current: $dx1, $dy1"
+        @debug "i: $i_wedge_right and j: $j_wedge_top"
+        @debug "---------------------------------------------"
         px1_current = px1
         py1_current = py1
         dx1_current = dx1
@@ -568,8 +568,8 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
         ###############################################################################
 
         if _top_skip_condition(min(i_wedge_right,i_wedge_left),min(j_wedge_top,j_wedge_bottom),2) # avoid the first iteration
-          @info "Ray $idx_rays is stopped"
-          @info "i_wedge_right = $i_wedge_right and j_wedge_top = $j_wedge_top"
+          @debug "Ray $idx_rays is stopped"
+          @debug "i_wedge_right = $i_wedge_right and j_wedge_top = $j_wedge_top"
 
           number_rays_stopped+=1
           continue
@@ -577,14 +577,14 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
 
 
         begin
-          @info "------------- Bending the ray ---------------"
-          @info "i: $i_wedge_right  i+1: $i_wedge_left"
-          @info "j: $j_wedge_top   j+1: $j_wedge_bottom"
-          @info "i_previous: $i_previous "
-          @info "j_previous: $j_previous  j: $j_wedge_top"
-          @info "j: $j_wedge_top   j+1: $j_wedge_bottom"
+          @debug "------------- Bending the ray ---------------"
+          @debug "i: $i_wedge_right  i+1: $i_wedge_left"
+          @debug "j: $j_wedge_top   j+1: $j_wedge_bottom"
+          @debug "i_previous: $i_previous "
+          @debug "j_previous: $j_previous  j: $j_wedge_top"
+          @debug "j: $j_wedge_top   j+1: $j_wedge_bottom"
           local nₜ = atm_n[i_wedge_right,j_wedge_top]
-          @info "nₜ is $nₜ and nᵢ is $nᵢ"
+          @debug "nₜ is $nₜ and nᵢ is $nᵢ"
           if !(nᵢ==nₜ) # do bend only if the refractive index are different
             local direction_x = dx1
             local direction_y = dy1
@@ -608,11 +608,11 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
           θ_out[idx_rays] = θ
           # set up next iteration
           s_out[idx_rays] = s
-          @info "i is $i_wedge_right  i+1 is $i_wedge_left"
-          @info "j is $j_wedge_top  j+1 is $j_wedge_bottom"
+          @debug "i is $i_wedge_right  i+1 is $i_wedge_left"
+          @debug "j is $j_wedge_top  j+1 is $j_wedge_bottom"
           aθmin[idx_rays] = atm_θ[i_wedge_right]
           aθmax[idx_rays] = atm_θ[i_wedge_left]
-          @info "θmin is $(aθmin[idx_rays]) and θmax is $(aθmax[idx_rays])"
+          @debug "θmin is $(aθmin[idx_rays]) and θmax is $(aθmax[idx_rays])"
           incident_refractive_index[idx_rays]  = atm_n[i_wedge_right,j_wedge_top]
           ascending[idx_rays] = isAscending
 
@@ -633,11 +633,11 @@ function marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,apx::A,apy::A,adx::A,ady
           retrieval_dy[idx_rays,iter+1]=dy1
           current_quote_tangent = max(0,min(current_quote_tangent,s))  #update tangent quote
           tangent_quote[idx_rays] = current_quote_tangent
-          @info "current_quote_tangent is $current_quote_tangent"
-          @info "s is $s"
-          @info "i is $i_wedge_right and j is $j_wedge_top"
-          @info "t is $t"
-          @info "---------------------------------------------"
+          @debug "current_quote_tangent is $current_quote_tangent"
+          @debug "s is $s"
+          @debug "i is $i_wedge_right and j is $j_wedge_top"
+          @debug "t is $t"
+          @debug "---------------------------------------------"
 
         end
     end

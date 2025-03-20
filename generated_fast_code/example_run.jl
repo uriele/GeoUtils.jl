@@ -271,7 +271,7 @@ fig
 
 figure=Figure()
 ax=Axis(figure[1,1])
-
+with_theme(theme_latexfonts()) do
 for inp in inputray
   lines!(ax,
   [ray(inp.px,inp.py,inp.dx,inp.dy,t) for t in (0,1)])
@@ -286,8 +286,10 @@ end
 for h in h_levels
   lines!(ax,[ellipse(θ,h) for θ in LinRange(ext_theta...,1000)],color=:black )
 end
-
-
+xlims!(ax,0.960,1.0)
+ylims!(ax,-0.30,-0.15)
+end
+save("./issue_ray.png",figure)
 
 scatter!(ax,[(px,py) for (px,py) in zip(test_retrieval.px[1,2:end],test_retrieval.py[1,2:end])])
 TTT=10
