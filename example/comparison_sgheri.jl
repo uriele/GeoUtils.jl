@@ -25,7 +25,8 @@ setModel()
 
 # only radii
 #setDebugIntersection(0)
-include("initialization_script.jl")
+pwd()
+#include("./example/initialization_script.jl")
 
 #get discretized atmosphere
 z,phi= atm_nc["z"][:],atm_nc["phi"][:]

@@ -1385,12 +1385,12 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
   rho_max = T(50)
   kloops = div(kmax,5, RoundUp) #Internal loop of the Newton method
   #external loop over all the points
-    @inbounds for iter in 1:iter_eff
+  @inbounds for iter in 1:iter_eff
 
     # internal loop of ray tracing
       #@batch for idirection_x_rays in eachindex(t_out)
-      for idirection_x_rays in eachindex(t_out)
-        @debug "Ray $idirection_x_rays and iteration $iter"
+    for idirection_x_rays in eachindex(t_out)
+        #@debug "Ray $idirection_x_rays and iteration $iter"
         # first iteration is diffent from the rest
         # I need to set the initial value of theta
         # and find the initial wedge, also all incident refractive index are 1
@@ -1432,13 +1432,9 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
 
         # this value is computed when the wedge is found when the ray tracing is all in one loop
         #local nₜ = nₜ[idirection_x_rays]                   # gibberish the first iteration
-        begin
-          if iter==1
-            if  initialized==false
 
-
-
-
+        if iter==1
+          if  initialized==false
               # set the initial value of s to be the top of the atmosphere
               s = max_altitude  # assumed to be in a descending order
               nᵢ= free_space    # assumed to be vacuum
@@ -1452,11 +1448,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
               retrieval_n[idirection_x_rays,1]=T(1)
               retrieval_θ[idirection_x_rays,1]=NaN
               retrieval_h[idirection_x_rays,1]=NaN
-
-
-
-
-            else
+          else
 
               i_wedge = retrieval_i[idirection_x_rays,1]
               j_wedge = retrieval_j[idirection_x_rays,1]
@@ -1469,7 +1461,6 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
 
               θmin     = atm_θ[i_wedge]
               θmax     = atm_θ[i_wedge_plus_1]
-            end
           end
         end
 
@@ -1480,15 +1471,14 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
         @debug "---------------------------------------------"
 
         # update indexes
-        begin
-          i_wedge        = retrieval_i[idirection_x_rays,iter]
-          i_wedge_plus_1 = i_wedge+1
-          j_wedge        = retrieval_j[idirection_x_rays,iter]
-          j_wedge_plus_1 = j_wedge+1
-          if IsPeriodic
-            i_wedge = mod1(i_wedge,Natm_n)
-            i_wedge_plus_1 = mod1(i_wedge+1,Natm_n)
-          end
+        i_wedge        = retrieval_i[idirection_x_rays,iter]
+        i_wedge_plus_1 = i_wedge+1
+        j_wedge        = retrieval_j[idirection_x_rays,iter]
+        j_wedge_plus_1 = j_wedge+1
+        if IsPeriodic
+          i_wedge = mod1(i_wedge,Natm_n)
+          i_wedge_plus_1 = mod1(i_wedge+1,Natm_n)
+        end
           i_wedge = i_wedge< Natm_n ? i_wedge : -1
           i_wedge_plus_1 = i_wedge_plus_1< Natm_n ? i_wedge_plus_1 : -1
           j_wedge = j_wedge< Matm_n ? j_wedge : -1
@@ -1503,7 +1493,6 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
         #   1. The code would do some unnecessary computation
         #   2. The code would update incorrectly the number_rays_stopped, leading to an early stop
         if ((iter>1) &&  (j_wedge<1 ||  i_wedge<1 || i_wedge_plus_1<1 || j_wedge_plus_1<1))
-
           retrieval_h[idirection_x_rays,iter+1]=NaN
           retrieval_t[idirection_x_rays,iter+1]=NaN
           retrieval_point_x[idirection_x_rays,iter+1]=NaN
@@ -1518,7 +1507,6 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
         end
 
         # begin the intersection loop
-
         begin
           # normalization of the direction
           local norm = hypot(direction_x1, direction_y1)
@@ -1541,7 +1529,6 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
           local f_with_penality
           local rho = 0.0 #penality factor
           local gamma = 1.5 #penality factor
-
 
 
           begin
@@ -1611,68 +1598,57 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
               # compute new θ
               begin
                 # trigonometric function needed for computing the gradient and hessian
-                begin
-                  sinθ² = sinθ * sinθ
-                  half_sin2θ = sinθ * cosθ
-                  cos2θ = cosθ² - sinθ²
-                end
+
+                sinθ² = sinθ * sinθ
+                half_sin2θ = sinθ * cosθ
+                cos2θ = cosθ² - sinθ²
+
                 # compute the gradient
-                begin
-                  begin
-                    dpoint_x2dθ = -sinθ
-                    dpoint_y2dθ = bcosθ
-                    dpoint_x2dθ_0 = -bsinθ
-                    dpoint_y2dθ_0 = cosθ
-                  end
-                  begin
-                    half_dR = e² * half_sin2θ
-                    half_dR² = half_dR * half_dR
-                    half_d²R = e² * cos2θ
-                    N² = N * N
-                    dNdθ = -half_dR
-                    d²Ndθ² = -half_d²R + 3 * N² * half_dR²
-                    ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
-                    ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
-                  end
-                  begin
-                    dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
-                    dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
-                    dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
-                    dPxdθ = direction_x1 * dtdθ
-                    dPydθ = direction_y1 * dtdθ
-                    dfxdθ = dFxdθ - dPxdθ
-                    dfydθ = dFydθ - dPydθ
-                  end
-                  g = fx * dfxdθ + fy * dfydθ
-                end
+                dpoint_x2dθ = -sinθ
+                dpoint_y2dθ = bcosθ
+                dpoint_x2dθ_0 = -bsinθ
+                dpoint_y2dθ_0 = cosθ
+
+                half_dR = e² * half_sin2θ
+                half_dR² = half_dR * half_dR
+                half_d²R = e² * cos2θ
+                N² = N * N
+                dNdθ = -half_dR
+                d²Ndθ² = -half_d²R + 3 * N² * half_dR²
+                ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
+                ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
+
+                dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
+                dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
+                dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
+                dPxdθ = direction_x1 * dtdθ
+                dPydθ = direction_y1 * dtdθ
+                dfxdθ = dFxdθ - dPxdθ
+                dfydθ = dFydθ - dPydθ
+                g = fx * dfxdθ + fy * dfydθ
                 # compute the hessian
-                begin
-                  begin
-                    d²point_x2dθ² = -point_x2
-                    d²point_y2dθ² = -point_y2
-                    d²direction_x2dθ²_0 = -direction_x2
-                    d²direction_y2dθ²_0 = -direction_y2
-                  end
-                  begin
-                    d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
-                    d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
-                    d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
-                    d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
-                  end
-                  begin
-                    d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
-                    d²Pxdθ² = direction_x1 * d²tdθ²
-                    d²Pydθ² = direction_y1 * d²tdθ²
-                    dfxdθ_squared = dfxdθ * dfxdθ
-                    dfydθ_squared = dfydθ * dfydθ
-                    d²fxdθ² = d²Fxdθ² - d²Pxdθ²
-                    d²fydθ² = d²Fydθ² - d²Pydθ²
-                  end
-                  h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
+
+                d²point_x2dθ² = -point_x2
+                d²point_y2dθ² = -point_y2
+                d²direction_x2dθ²_0 = -direction_x2
+                d²direction_y2dθ²_0 = -direction_y2
+                d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
+                d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
+                d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
+                d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
+
+                d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
+                d²Pxdθ² = direction_x1 * d²tdθ²
+                d²Pydθ² = direction_y1 * d²tdθ²
+                dfxdθ_squared = dfxdθ * dfxdθ
+                dfydθ_squared = dfydθ * dfydθ
+                d²fxdθ² = d²Fxdθ² - d²Pxdθ²
+                d²fydθ² = d²Fydθ² - d²Pydθ²
+
+                h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
                   # insure positive definess of the hessian by adding a const
                   # similar to how LDLT works to ensure positive definiteness of matrix
-                  h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
-                end
+                h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
                 # penality for negative t
                 begin
                   penality_t = 0
@@ -1690,9 +1666,6 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
 
                   g += g_t
                   h += h_t
-
-
-
                 end
                 # compute the newton step
                 p = -g / h
@@ -1703,130 +1676,95 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
               end
               # compute new (f,t)
               begin
-                begin
-                  cosθ = cos(θ)
-                  sinθ = sin(θ)
-                  bcosθ = b_normalized * cosθ
-                  bsinθ = b_normalized * sinθ
-                  cosθ² = cosθ * cosθ
-                end
-                begin
-                  R = 1 - e² * cosθ²
-                  N = 1 / sqrt(R)
-                  point_x2 = cosθ
-                  point_y2 = bsinθ
-                  direction_x2 = bcosθ
-                  direction_y2 = sinθ
-                  Fx = point_x2 + s * direction_x2 * N
-                  Fy = point_y2 + s * direction_y2 * N
-                end
+                cosθ = cos(θ)
+                sinθ = sin(θ)
+                bcosθ = b_normalized * cosθ
+                bsinθ = b_normalized * sinθ
+                cosθ² = cosθ * cosθ
+
+                R = 1 - e² * cosθ²
+                N = 1 / sqrt(R)
+                point_x2 = cosθ
+                point_y2 = bsinθ
+                direction_x2 = bcosθ
+                direction_y2 = sinθ
+                Fx = point_x2 + s * direction_x2 * N
+                Fy = point_y2 + s * direction_y2 * N
+
                 t = -origin_times_direction + (direction_x1 * Fx + direction_y1 * Fy)
-                begin
-                  Px = point_x1 + t * direction_x1
-                  Py = point_y1 + t * direction_y1
-                end
-                begin
-                  fx = Fx - Px
-                  fy = Fy - Py
-                  f = fx * fx + fy * fy
-                end
+
+                Px = point_x1 + t * direction_x1
+                Py = point_y1 + t * direction_y1
+                fx = Fx - Px
+                fy = Fy - Py
+                f = fx * fx + fy * fy
               end
               # stopping criteria and update fold ← f
-              begin
-
-
-
-                if abs(f-fold) < δ && (penality_t==0)
-
-                    break
-                end
-
-                fold = f
+              if abs(f-fold) < δ && (penality_t==0)
+                break
               end
+
+              fold = f
+
             end
 
-          # Newton loop
-          #@info "Starting the Newton loop θ0 is $θ"
-          for k in 1:kloops
-
-            ############################
-            # Updates every 5 iterations
-            if penality_t>0
-              rho=min(rho*gamma,rho_max)
-            end
-            ############################
-
-            # unroll block of 5 iterations
-            # unroll block
-            #   new function value and evaluation breaking criteria
             #   step block 1
             begin
               # update k ← k + 1
               # compute new θ
               begin
                 # trigonometric function needed for computing the gradient and hessian
-                begin
-                  sinθ² = sinθ * sinθ
-                  half_sin2θ = sinθ * cosθ
-                  cos2θ = cosθ² - sinθ²
-                end
+
+                sinθ² = sinθ * sinθ
+                half_sin2θ = sinθ * cosθ
+                cos2θ = cosθ² - sinθ²
+
                 # compute the gradient
-                begin
-                  begin
-                    dpoint_x2dθ = -sinθ
-                    dpoint_y2dθ = bcosθ
-                    dpoint_x2dθ_0 = -bsinθ
-                    dpoint_y2dθ_0 = cosθ
-                  end
-                  begin
-                    half_dR = e² * half_sin2θ
-                    half_dR² = half_dR * half_dR
-                    half_d²R = e² * cos2θ
-                    N² = N * N
-                    dNdθ = -half_dR
-                    d²Ndθ² = -half_d²R + 3 * N² * half_dR²
-                    ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
-                    ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
-                  end
-                  begin
-                    dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
-                    dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
-                    dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
-                    dPxdθ = direction_x1 * dtdθ
-                    dPydθ = direction_y1 * dtdθ
-                    dfxdθ = dFxdθ - dPxdθ
-                    dfydθ = dFydθ - dPydθ
-                  end
-                  g = fx * dfxdθ + fy * dfydθ
-                end
+                dpoint_x2dθ = -sinθ
+                dpoint_y2dθ = bcosθ
+                dpoint_x2dθ_0 = -bsinθ
+                dpoint_y2dθ_0 = cosθ
+
+                half_dR = e² * half_sin2θ
+                half_dR² = half_dR * half_dR
+                half_d²R = e² * cos2θ
+                N² = N * N
+                dNdθ = -half_dR
+                d²Ndθ² = -half_d²R + 3 * N² * half_dR²
+                ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
+                ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
+
+                dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
+                dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
+                dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
+                dPxdθ = direction_x1 * dtdθ
+                dPydθ = direction_y1 * dtdθ
+                dfxdθ = dFxdθ - dPxdθ
+                dfydθ = dFydθ - dPydθ
+                g = fx * dfxdθ + fy * dfydθ
                 # compute the hessian
-                begin
-                  begin
-                    d²point_x2dθ² = -point_x2
-                    d²point_y2dθ² = -point_y2
-                    d²direction_x2dθ²_0 = -direction_x2
-                    d²direction_y2dθ²_0 = -direction_y2
-                  end
-                  begin
-                    d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
-                    d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
-                    d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
-                    d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
-                  end
-                  begin
-                    d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
-                    d²Pxdθ² = direction_x1 * d²tdθ²
-                    d²Pydθ² = direction_y1 * d²tdθ²
-                    dfxdθ_squared = dfxdθ * dfxdθ
-                    dfydθ_squared = dfydθ * dfydθ
-                    d²fxdθ² = d²Fxdθ² - d²Pxdθ²
-                    d²fydθ² = d²Fydθ² - d²Pydθ²
-                  end
-                  h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
+
+                d²point_x2dθ² = -point_x2
+                d²point_y2dθ² = -point_y2
+                d²direction_x2dθ²_0 = -direction_x2
+                d²direction_y2dθ²_0 = -direction_y2
+                d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
+                d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
+                d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
+                d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
+
+                d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
+                d²Pxdθ² = direction_x1 * d²tdθ²
+                d²Pydθ² = direction_y1 * d²tdθ²
+                dfxdθ_squared = dfxdθ * dfxdθ
+                dfydθ_squared = dfydθ * dfydθ
+                d²fxdθ² = d²Fxdθ² - d²Pxdθ²
+                d²fydθ² = d²Fydθ² - d²Pydθ²
+
+                h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
                   # insure positive definess of the hessian by adding a const
                   # similar to how LDLT works to ensure positive definiteness of matrix
-                  h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
-                end
+                h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
                 # penality for negative t
                 begin
                   penality_t = 0
@@ -1844,35 +1782,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
 
                   g += g_t
                   h += h_t
-
-
-
                 end
-
-
-                #@info "e²: $e²  θ: $θ cosθ^2: $(cos(θ)^2) R₀: $(1-e² * cos(θ)^2)"
-                #@info "N₀  $N"
-                #@info "∂Nx∂θ $(dNdθ*N²)"
-                #@info "∂²Nx∂θ² $(d²Ndθ² * N² * N²)"
-                #@info "∂²Nx∂θ² $dPxdθ"
-                #@info "∂Px∂θ $dPxdθ"
-                #@info "∂Py∂θ $dPydθ"
-                #@info "∂Fx∂θ $dFxdθ"
-                #@info "∂Fy∂θ $dFydθ"
-                #@info "∂fx∂θ $dfxdθ"
-                #@info "∂fy∂θ $dfydθ"
-                #@info "∂²Px∂θ² $d²Pxdθ²"
-                #@info "∂²Py∂θ² $d²Pydθ²"
-                #@info "∂²Fx∂θ² $d²Fxdθ²"
-                #@info "∂²Fy∂θ² $d²Fydθ²"
-                #@info "∂²fx∂θ² $d²fxdθ²"
-                #@info "∂²fy∂θ² $d²fydθ²"
-                #@info "g_step $g"
-                #@info "h_step $h"
-                #@info "p_step $(-g/h)"
-                #return
-
-
                 # compute the newton step
                 p = -g / h
                 # compute next θ
@@ -1882,116 +1792,95 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
               end
               # compute new (f,t)
               begin
-                begin
-                  cosθ = cos(θ)
-                  sinθ = sin(θ)
-                  bcosθ = b_normalized * cosθ
-                  bsinθ = b_normalized * sinθ
-                  cosθ² = cosθ * cosθ
-                end
-                begin
-                  R = 1 - e² * cosθ²
-                  N = 1 / sqrt(R)
-                  point_x2 = cosθ
-                  point_y2 = bsinθ
-                  direction_x2 = bcosθ
-                  direction_y2 = sinθ
-                  Fx = point_x2 + s * direction_x2 * N
-                  Fy = point_y2 + s * direction_y2 * N
-                end
+                cosθ = cos(θ)
+                sinθ = sin(θ)
+                bcosθ = b_normalized * cosθ
+                bsinθ = b_normalized * sinθ
+                cosθ² = cosθ * cosθ
+
+                R = 1 - e² * cosθ²
+                N = 1 / sqrt(R)
+                point_x2 = cosθ
+                point_y2 = bsinθ
+                direction_x2 = bcosθ
+                direction_y2 = sinθ
+                Fx = point_x2 + s * direction_x2 * N
+                Fy = point_y2 + s * direction_y2 * N
+
                 t = -origin_times_direction + (direction_x1 * Fx + direction_y1 * Fy)
-                begin
-                  Px = point_x1 + t * direction_x1
-                  Py = point_y1 + t * direction_y1
-                end
-                begin
-                  fx = Fx - Px
-                  fy = Fy - Py
-                  f = fx * fx + fy * fy
-                end
+
+                Px = point_x1 + t * direction_x1
+                Py = point_y1 + t * direction_y1
+                fx = Fx - Px
+                fy = Fy - Py
+                f = fx * fx + fy * fy
               end
               # stopping criteria and update fold ← f
-              begin
-
-
-
-                if abs(f-fold) < δ && (penality_t==0)
-
-                    break
-                end
-
-                fold = f
+              if abs(f-fold) < δ && (penality_t==0)
+                break
               end
+
+              fold = f
+
             end
 
-            #   step block 2
+            #   step block 1
             begin
               # update k ← k + 1
               # compute new θ
               begin
                 # trigonometric function needed for computing the gradient and hessian
-                begin
-                  sinθ² = sinθ * sinθ
-                  half_sin2θ = sinθ * cosθ
-                  cos2θ = cosθ² - sinθ²
-                end
+
+                sinθ² = sinθ * sinθ
+                half_sin2θ = sinθ * cosθ
+                cos2θ = cosθ² - sinθ²
+
                 # compute the gradient
-                begin
-                  begin
-                    dpoint_x2dθ = -sinθ
-                    dpoint_y2dθ = bcosθ
-                    dpoint_x2dθ_0 = -bsinθ
-                    dpoint_y2dθ_0 = cosθ
-                  end
-                  begin
-                    half_dR = e² * half_sin2θ
-                    half_dR² = half_dR * half_dR
-                    half_d²R = e² * cos2θ
-                    N² = N * N
-                    dNdθ = -half_dR
-                    d²Ndθ² = -half_d²R + 3 * N² * half_dR²
-                    ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
-                    ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
-                  end
-                  begin
-                    dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
-                    dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
-                    dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
-                    dPxdθ = direction_x1 * dtdθ
-                    dPydθ = direction_y1 * dtdθ
-                    dfxdθ = dFxdθ - dPxdθ
-                    dfydθ = dFydθ - dPydθ
-                  end
-                  g = fx * dfxdθ + fy * dfydθ
-                end
+                dpoint_x2dθ = -sinθ
+                dpoint_y2dθ = bcosθ
+                dpoint_x2dθ_0 = -bsinθ
+                dpoint_y2dθ_0 = cosθ
+
+                half_dR = e² * half_sin2θ
+                half_dR² = half_dR * half_dR
+                half_d²R = e² * cos2θ
+                N² = N * N
+                dNdθ = -half_dR
+                d²Ndθ² = -half_d²R + 3 * N² * half_dR²
+                ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
+                ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
+
+                dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
+                dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
+                dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
+                dPxdθ = direction_x1 * dtdθ
+                dPydθ = direction_y1 * dtdθ
+                dfxdθ = dFxdθ - dPxdθ
+                dfydθ = dFydθ - dPydθ
+                g = fx * dfxdθ + fy * dfydθ
                 # compute the hessian
-                begin
-                  begin
-                    d²point_x2dθ² = -point_x2
-                    d²point_y2dθ² = -point_y2
-                    d²direction_x2dθ²_0 = -direction_x2
-                    d²direction_y2dθ²_0 = -direction_y2
-                  end
-                  begin
-                    d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
-                    d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
-                    d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
-                    d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
-                  end
-                  begin
-                    d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
-                    d²Pxdθ² = direction_x1 * d²tdθ²
-                    d²Pydθ² = direction_y1 * d²tdθ²
-                    dfxdθ_squared = dfxdθ * dfxdθ
-                    dfydθ_squared = dfydθ * dfydθ
-                    d²fxdθ² = d²Fxdθ² - d²Pxdθ²
-                    d²fydθ² = d²Fydθ² - d²Pydθ²
-                  end
-                  h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
+
+                d²point_x2dθ² = -point_x2
+                d²point_y2dθ² = -point_y2
+                d²direction_x2dθ²_0 = -direction_x2
+                d²direction_y2dθ²_0 = -direction_y2
+                d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
+                d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
+                d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
+                d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
+
+                d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
+                d²Pxdθ² = direction_x1 * d²tdθ²
+                d²Pydθ² = direction_y1 * d²tdθ²
+                dfxdθ_squared = dfxdθ * dfxdθ
+                dfydθ_squared = dfydθ * dfydθ
+                d²fxdθ² = d²Fxdθ² - d²Pxdθ²
+                d²fydθ² = d²Fydθ² - d²Pydθ²
+
+                h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
                   # insure positive definess of the hessian by adding a const
                   # similar to how LDLT works to ensure positive definiteness of matrix
-                  h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
-                end
+                h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
                 # penality for negative t
                 begin
                   penality_t = 0
@@ -2014,119 +1903,100 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+
                 #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
-                begin
-                  cosθ = cos(θ)
-                  sinθ = sin(θ)
-                  bcosθ = b_normalized * cosθ
-                  bsinθ = b_normalized * sinθ
-                  cosθ² = cosθ * cosθ
-                end
-                begin
-                  R = 1 - e² * cosθ²
-                  N = 1 / sqrt(R)
-                  point_x2 = cosθ
-                  point_y2 = bsinθ
-                  direction_x2 = bcosθ
-                  direction_y2 = sinθ
-                  Fx = point_x2 + s * direction_x2 * N
-                  Fy = point_y2 + s * direction_y2 * N
-                end
+                cosθ = cos(θ)
+                sinθ = sin(θ)
+                bcosθ = b_normalized * cosθ
+                bsinθ = b_normalized * sinθ
+                cosθ² = cosθ * cosθ
+
+                R = 1 - e² * cosθ²
+                N = 1 / sqrt(R)
+                point_x2 = cosθ
+                point_y2 = bsinθ
+                direction_x2 = bcosθ
+                direction_y2 = sinθ
+                Fx = point_x2 + s * direction_x2 * N
+                Fy = point_y2 + s * direction_y2 * N
+
                 t = -origin_times_direction + (direction_x1 * Fx + direction_y1 * Fy)
-                begin
-                  Px = point_x1 + t * direction_x1
-                  Py = point_y1 + t * direction_y1
-                end
-                begin
-                  fx = Fx - Px
-                  fy = Fy - Py
-                  f = fx * fx + fy * fy
-                end
+
+                Px = point_x1 + t * direction_x1
+                Py = point_y1 + t * direction_y1
+                fx = Fx - Px
+                fy = Fy - Py
+                f = fx * fx + fy * fy
               end
               # stopping criteria and update fold ← f
-              begin
-
-
-                if abs(f-fold) < δ && (penality_t==0)
-
-                    break
-                end
-
-                fold = f
+              if abs(f-fold) < δ && (penality_t==0)
+                break
               end
+
+              fold = f
+
             end
 
-            #   step block 3
+            #   step block 1
             begin
               # update k ← k + 1
               # compute new θ
               begin
                 # trigonometric function needed for computing the gradient and hessian
-                begin
-                  sinθ² = sinθ * sinθ
-                  half_sin2θ = sinθ * cosθ
-                  cos2θ = cosθ² - sinθ²
-                end
+
+                sinθ² = sinθ * sinθ
+                half_sin2θ = sinθ * cosθ
+                cos2θ = cosθ² - sinθ²
+
                 # compute the gradient
-                begin
-                  begin
-                    dpoint_x2dθ = -sinθ
-                    dpoint_y2dθ = bcosθ
-                    dpoint_x2dθ_0 = -bsinθ
-                    dpoint_y2dθ_0 = cosθ
-                  end
-                  begin
-                    half_dR = e² * half_sin2θ
-                    half_dR² = half_dR * half_dR
-                    half_d²R = e² * cos2θ
-                    N² = N * N
-                    dNdθ = -half_dR
-                    d²Ndθ² = -half_d²R + 3 * N² * half_dR²
-                    ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
-                    ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
-                  end
-                  begin
-                    dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
-                    dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
-                    dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
-                    dPxdθ = direction_x1 * dtdθ
-                    dPydθ = direction_y1 * dtdθ
-                    dfxdθ = dFxdθ - dPxdθ
-                    dfydθ = dFydθ - dPydθ
-                  end
-                  g = fx * dfxdθ + fy * dfydθ
-                end
+                dpoint_x2dθ = -sinθ
+                dpoint_y2dθ = bcosθ
+                dpoint_x2dθ_0 = -bsinθ
+                dpoint_y2dθ_0 = cosθ
+
+                half_dR = e² * half_sin2θ
+                half_dR² = half_dR * half_dR
+                half_d²R = e² * cos2θ
+                N² = N * N
+                dNdθ = -half_dR
+                d²Ndθ² = -half_d²R + 3 * N² * half_dR²
+                ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
+                ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
+
+                dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
+                dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
+                dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
+                dPxdθ = direction_x1 * dtdθ
+                dPydθ = direction_y1 * dtdθ
+                dfxdθ = dFxdθ - dPxdθ
+                dfydθ = dFydθ - dPydθ
+                g = fx * dfxdθ + fy * dfydθ
                 # compute the hessian
-                begin
-                  begin
-                    d²point_x2dθ² = -point_x2
-                    d²point_y2dθ² = -point_y2
-                    d²direction_x2dθ²_0 = -direction_x2
-                    d²direction_y2dθ²_0 = -direction_y2
-                  end
-                  begin
-                    d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
-                    d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
-                    d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
-                    d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
-                  end
-                  begin
-                    d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
-                    d²Pxdθ² = direction_x1 * d²tdθ²
-                    d²Pydθ² = direction_y1 * d²tdθ²
-                    dfxdθ_squared = dfxdθ * dfxdθ
-                    dfydθ_squared = dfydθ * dfydθ
-                    d²fxdθ² = d²Fxdθ² - d²Pxdθ²
-                    d²fydθ² = d²Fydθ² - d²Pydθ²
-                  end
-                  h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
+
+                d²point_x2dθ² = -point_x2
+                d²point_y2dθ² = -point_y2
+                d²direction_x2dθ²_0 = -direction_x2
+                d²direction_y2dθ²_0 = -direction_y2
+                d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
+                d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
+                d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
+                d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
+
+                d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
+                d²Pxdθ² = direction_x1 * d²tdθ²
+                d²Pydθ² = direction_y1 * d²tdθ²
+                dfxdθ_squared = dfxdθ * dfxdθ
+                dfydθ_squared = dfydθ * dfydθ
+                d²fxdθ² = d²Fxdθ² - d²Pxdθ²
+                d²fydθ² = d²Fydθ² - d²Pydθ²
+
+                h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
                   # insure positive definess of the hessian by adding a const
                   # similar to how LDLT works to ensure positive definiteness of matrix
-                  h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
-                end
+                h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
                 # penality for negative t
                 begin
                   penality_t = 0
@@ -2149,119 +2019,100 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+
                 #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
-                begin
-                  cosθ = cos(θ)
-                  sinθ = sin(θ)
-                  bcosθ = b_normalized * cosθ
-                  bsinθ = b_normalized * sinθ
-                  cosθ² = cosθ * cosθ
-                end
-                begin
-                  R = 1 - e² * cosθ²
-                  N = 1 / sqrt(R)
-                  point_x2 = cosθ
-                  point_y2 = bsinθ
-                  direction_x2 = bcosθ
-                  direction_y2 = sinθ
-                  Fx = point_x2 + s * direction_x2 * N
-                  Fy = point_y2 + s * direction_y2 * N
-                end
+                cosθ = cos(θ)
+                sinθ = sin(θ)
+                bcosθ = b_normalized * cosθ
+                bsinθ = b_normalized * sinθ
+                cosθ² = cosθ * cosθ
+
+                R = 1 - e² * cosθ²
+                N = 1 / sqrt(R)
+                point_x2 = cosθ
+                point_y2 = bsinθ
+                direction_x2 = bcosθ
+                direction_y2 = sinθ
+                Fx = point_x2 + s * direction_x2 * N
+                Fy = point_y2 + s * direction_y2 * N
+
                 t = -origin_times_direction + (direction_x1 * Fx + direction_y1 * Fy)
-                begin
-                  Px = point_x1 + t * direction_x1
-                  Py = point_y1 + t * direction_y1
-                end
-                begin
-                  fx = Fx - Px
-                  fy = Fy - Py
-                  f = fx * fx + fy * fy
-                end
+
+                Px = point_x1 + t * direction_x1
+                Py = point_y1 + t * direction_y1
+                fx = Fx - Px
+                fy = Fy - Py
+                f = fx * fx + fy * fy
               end
               # stopping criteria and update fold ← f
-              begin
-
-
-                if abs(f-fold) < δ && (penality_t==0)
-
-                    break
-                end
-
-                fold = f
+              if abs(f-fold) < δ && (penality_t==0)
+                break
               end
+
+              fold = f
+
             end
 
-            #   step block 4
+            #   step block 1
             begin
               # update k ← k + 1
               # compute new θ
               begin
                 # trigonometric function needed for computing the gradient and hessian
-                begin
-                  sinθ² = sinθ * sinθ
-                  half_sin2θ = sinθ * cosθ
-                  cos2θ = cosθ² - sinθ²
-                end
+
+                sinθ² = sinθ * sinθ
+                half_sin2θ = sinθ * cosθ
+                cos2θ = cosθ² - sinθ²
+
                 # compute the gradient
-                begin
-                  begin
-                    dpoint_x2dθ = -sinθ
-                    dpoint_y2dθ = bcosθ
-                    dpoint_x2dθ_0 = -bsinθ
-                    dpoint_y2dθ_0 = cosθ
-                  end
-                  begin
-                    half_dR = e² * half_sin2θ
-                    half_dR² = half_dR * half_dR
-                    half_d²R = e² * cos2θ
-                    N² = N * N
-                    dNdθ = -half_dR
-                    d²Ndθ² = -half_d²R + 3 * N² * half_dR²
-                    ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
-                    ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
-                  end
-                  begin
-                    dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
-                    dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
-                    dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
-                    dPxdθ = direction_x1 * dtdθ
-                    dPydθ = direction_y1 * dtdθ
-                    dfxdθ = dFxdθ - dPxdθ
-                    dfydθ = dFydθ - dPydθ
-                  end
-                  g = fx * dfxdθ + fy * dfydθ
-                end
+                dpoint_x2dθ = -sinθ
+                dpoint_y2dθ = bcosθ
+                dpoint_x2dθ_0 = -bsinθ
+                dpoint_y2dθ_0 = cosθ
+
+                half_dR = e² * half_sin2θ
+                half_dR² = half_dR * half_dR
+                half_d²R = e² * cos2θ
+                N² = N * N
+                dNdθ = -half_dR
+                d²Ndθ² = -half_d²R + 3 * N² * half_dR²
+                ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
+                ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
+
+                dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
+                dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
+                dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
+                dPxdθ = direction_x1 * dtdθ
+                dPydθ = direction_y1 * dtdθ
+                dfxdθ = dFxdθ - dPxdθ
+                dfydθ = dFydθ - dPydθ
+                g = fx * dfxdθ + fy * dfydθ
                 # compute the hessian
-                begin
-                  begin
-                    d²point_x2dθ² = -point_x2
-                    d²point_y2dθ² = -point_y2
-                    d²direction_x2dθ²_0 = -direction_x2
-                    d²direction_y2dθ²_0 = -direction_y2
-                  end
-                  begin
-                    d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
-                    d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
-                    d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
-                    d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
-                  end
-                  begin
-                    d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
-                    d²Pxdθ² = direction_x1 * d²tdθ²
-                    d²Pydθ² = direction_y1 * d²tdθ²
-                    dfxdθ_squared = dfxdθ * dfxdθ
-                    dfydθ_squared = dfydθ * dfydθ
-                    d²fxdθ² = d²Fxdθ² - d²Pxdθ²
-                    d²fydθ² = d²Fydθ² - d²Pydθ²
-                  end
-                  h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
+
+                d²point_x2dθ² = -point_x2
+                d²point_y2dθ² = -point_y2
+                d²direction_x2dθ²_0 = -direction_x2
+                d²direction_y2dθ²_0 = -direction_y2
+                d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
+                d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
+                d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
+                d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
+
+                d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
+                d²Pxdθ² = direction_x1 * d²tdθ²
+                d²Pydθ² = direction_y1 * d²tdθ²
+                dfxdθ_squared = dfxdθ * dfxdθ
+                dfydθ_squared = dfydθ * dfydθ
+                d²fxdθ² = d²Fxdθ² - d²Pxdθ²
+                d²fydθ² = d²Fydθ² - d²Pydθ²
+
+                h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
                   # insure positive definess of the hessian by adding a const
                   # similar to how LDLT works to ensure positive definiteness of matrix
-                  h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
-                end
+                h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
                 # penality for negative t
                 begin
                   penality_t = 0
@@ -2284,208 +2135,53 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+
                 #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
-                begin
-                  cosθ = cos(θ)
-                  sinθ = sin(θ)
-                  bcosθ = b_normalized * cosθ
-                  bsinθ = b_normalized * sinθ
-                  cosθ² = cosθ * cosθ
-                end
-                begin
-                  R = 1 - e² * cosθ²
-                  N = 1 / sqrt(R)
-                  point_x2 = cosθ
-                  point_y2 = bsinθ
-                  direction_x2 = bcosθ
-                  direction_y2 = sinθ
-                  Fx = point_x2 + s * direction_x2 * N
-                  Fy = point_y2 + s * direction_y2 * N
-                end
+                cosθ = cos(θ)
+                sinθ = sin(θ)
+                bcosθ = b_normalized * cosθ
+                bsinθ = b_normalized * sinθ
+                cosθ² = cosθ * cosθ
+
+                R = 1 - e² * cosθ²
+                N = 1 / sqrt(R)
+                point_x2 = cosθ
+                point_y2 = bsinθ
+                direction_x2 = bcosθ
+                direction_y2 = sinθ
+                Fx = point_x2 + s * direction_x2 * N
+                Fy = point_y2 + s * direction_y2 * N
+
                 t = -origin_times_direction + (direction_x1 * Fx + direction_y1 * Fy)
-                begin
-                  Px = point_x1 + t * direction_x1
-                  Py = point_y1 + t * direction_y1
-                end
-                begin
-                  fx = Fx - Px
-                  fy = Fy - Py
-                  f = fx * fx + fy * fy
-                end
+
+                Px = point_x1 + t * direction_x1
+                Py = point_y1 + t * direction_y1
+                fx = Fx - Px
+                fy = Fy - Py
+                f = fx * fx + fy * fy
               end
               # stopping criteria and update fold ← f
-              begin
-
-
-                if abs(f-fold) < δ && (penality_t==0)
-
-                    break
-                end
-
-                fold = f
+              if abs(f-fold) < δ && (penality_t==0)
+                break
               end
+
+              fold = f
+
             end
-            #   step block 5
-
-            begin
-              # update k ← k + 1
-              # compute new θ
-              begin
-                # trigonometric function needed for computing the gradient and hessian
-                begin
-                  sinθ² = sinθ * sinθ
-                  half_sin2θ = sinθ * cosθ
-                  cos2θ = cosθ² - sinθ²
-                end
-                # compute the gradient
-                begin
-                  begin
-                    dpoint_x2dθ = -sinθ
-                    dpoint_y2dθ = bcosθ
-                    dpoint_x2dθ_0 = -bsinθ
-                    dpoint_y2dθ_0 = cosθ
-                  end
-                  begin
-                    half_dR = e² * half_sin2θ
-                    half_dR² = half_dR * half_dR
-                    half_d²R = e² * cos2θ
-                    N² = N * N
-                    dNdθ = -half_dR
-                    d²Ndθ² = -half_d²R + 3 * N² * half_dR²
-                    ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
-                    ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
-                  end
-                  begin
-                    dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
-                    dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
-                    dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
-                    dPxdθ = direction_x1 * dtdθ
-                    dPydθ = direction_y1 * dtdθ
-                    dfxdθ = dFxdθ - dPxdθ
-                    dfydθ = dFydθ - dPydθ
-                  end
-                  g = fx * dfxdθ + fy * dfydθ
-                end
-                # compute the hessian
-                begin
-                  begin
-                    d²point_x2dθ² = -point_x2
-                    d²point_y2dθ² = -point_y2
-                    d²direction_x2dθ²_0 = -direction_x2
-                    d²direction_y2dθ²_0 = -direction_y2
-                  end
-                  begin
-                    d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
-                    d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
-                    d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
-                    d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
-                  end
-                  begin
-                    d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
-                    d²Pxdθ² = direction_x1 * d²tdθ²
-                    d²Pydθ² = direction_y1 * d²tdθ²
-                    dfxdθ_squared = dfxdθ * dfxdθ
-                    dfydθ_squared = dfydθ * dfydθ
-                    d²fxdθ² = d²Fxdθ² - d²Pxdθ²
-                    d²fydθ² = d²Fydθ² - d²Pydθ²
-                  end
-                  h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
-                  # insure positive definess of the hessian by adding a const
-                  # similar to how LDLT works to ensure positive definiteness of matrix
-                  h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
-                end
-                # penality for negative t
-                begin
-                  penality_t = 0
-                  g_t = 0
-                  h_t = 0
-                  if t < 0
-                    t² = t * t
-                    penality_t = -rho * t*t²
-                    g_t= -3t²*dtdθ
-                    h_t = -t²*d²tdθ²-6t*dtdθ*dtdθ
-                    g_t*=rho
-                    h_t*=rho
-                  end
-                  f_with_penality = f + penality_t
-
-                  g += g_t
-                  h += h_t
-                end
-                # compute the newton step
-                p = -g / h
-                # compute next θ
-                θ = mod2pi(θ + p)
-                #@info "p_newton is $p  θ is $θ  t is $t"
-              end
-              # compute new (f,t)
-              begin
-                begin
-                  cosθ = cos(θ)
-                  sinθ = sin(θ)
-                  bcosθ = b_normalized * cosθ
-                  bsinθ = b_normalized * sinθ
-                  cosθ² = cosθ * cosθ
-                end
-                begin
-                  R = 1 - e² * cosθ²
-                  N = 1 / sqrt(R)
-                  point_x2 = cosθ
-                  point_y2 = bsinθ
-                  direction_x2 = bcosθ
-                  direction_y2 = sinθ
-                  Fx = point_x2 + s * direction_x2 * N
-                  Fy = point_y2 + s * direction_y2 * N
-                end
-                t = -origin_times_direction + (direction_x1 * Fx + direction_y1 * Fy)
-                begin
-                  Px = point_x1 + t * direction_x1
-                  Py = point_y1 + t * direction_y1
-                end
-                begin
-                  fx = Fx - Px
-                  fy = Fy - Py
-                  f = fx * fx + fy * fy
-                end
-              end
-              # stopping criteria and update fold ← f
-              begin
-
-
-                if abs(f-fold) < δ && (penality_t==0)
-
-                    break
-                end
-
-                fold = f
-              end
-            end
-
           end
-          # clamping angle to the range
-          # if θmin <= θmax  thene θ ∈ [θmin, θmax]
-
 
           begin
             if (θmin <= θmax && θmin < θ < θmax) || (θmin > θmax && (θ > θmin || θ < θmax))
-
-
                 s += sqrt(f) * directional_sign
-
             else
-
-
-
               # angle clamping f(θ,θmin,θmax)
               let
                 if θmin<=θmax
                   θ=clamp(θ,θmin,θmax)
-
                 else
-
                   dmin = mod(θ - θmin, 2π)
                   dmax = mod(θmax - θ, 2π)
                   θ = dmin < dmax ? θmin : θmax
@@ -2501,15 +2197,12 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 normF = hypot(direction_x2, direction_y2)
                 direction_x2 /= normF
                 direction_y2 /= normF
-
                 det = direction_x1 * direction_y2 - direction_y1 * direction_x2
                 ϵ = 1.0e-10        # TO DO: maybe add this value as a kwargs
                 s = NaN        # initial s to NaN
                 t = NaN        # initial t to NaN
                 local Δp12x = point_x2 - point_x1
                 local Δp12y = point_y2 - point_y1
-
-
                 if abs(det) > ϵ
                   t = (Δp12x * direction_y2 - Δp12y * direction_x2) / det
                   s = (Δp12x * direction_y1 - Δp12y * direction_x1) / det
@@ -2783,7 +2476,6 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
           retrieval_h[idirection_x_rays,iter+1]=s
 
         end
-    end
     # early stop condition
     if number_rays_stopped == NumRays
       break
@@ -2797,7 +2489,7 @@ end
 function limb_angle(w,z,ang)
    θ = atan(z/w)
   (tx,ty)=(z,-w)|> x-> x./hypot(x...) .*-1.0
-  #################################
+
   angle= ang*-1
 
   dir=_rotation_matrix(angle)*[tx,ty]
@@ -2807,18 +2499,19 @@ end
 function nadir_angle(w,z,ang)
    θ = atan(z/w)
   (nx,ny)=(-w,-z)|> x-> x./hypot(x...) .*-1.0
-  #################################
+
   angle= ang
 
   dir=_rotation_matrix(angle)*[nx,ny]
   return (dir[1],dir[2])
 end
 
+
 function nadir_angle_normal(nx,ny,ang;outward::Bool=true)
   inwardoutward = outward ? 1.0 : -1.0
   (nx,ny)=(nx,nx)|> x-> x./hypot(x...) .*inwardoutward
- #################################
- angle= ang
+
+  angle= ang
 
  dir=_rotation_matrix(angle)*[nx,ny]
  return (dir[1],dir[2])

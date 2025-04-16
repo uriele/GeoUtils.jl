@@ -1,4 +1,3 @@
-cd("generated_fast_code")
 include("./implementation_new_ray_tracing.jl")
 include("./single_functions.jl")
 using NCDatasets
@@ -18,13 +17,13 @@ end
 major_axis_earth = majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(Unitful.km,x) |> ustrip
 minor_axis_earth = minoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(Unitful.km,x) |> ustrip
 eccentricity²_earth= eccentricity²(ellipsoid(WGS84Latest))
-
+cd("generated_fast_code")
 ##################################################################
 #  EARTH MODEL
 ##################################################################
 b_wgs84 = minor_axis_earth/major_axis_earth
 e_wgs84 = sqrt(1-b_wgs84^2)
-ray(point_x,point_y,direction_x,direction_y,t)=(point_x,point_y).+(t*direction_x,t*direction_y)
+ray(px,py,dx,dy,t)=(px,py).+(t*dx,t*dy)
 ellipse(θ,h)=(cos(θ),b_wgs84*sin(θ)).+h.*(b_wgs84*cos(θ),sin(θ))./sqrt(1-e_wgs84*cos(θ)*cos(θ))
 ##################################################################
 cairt_nc=Dataset("../generated_fast_code/cairt_trace_out_nuovo.nc")
@@ -46,9 +45,17 @@ path_lengths_km          = cairt_nc_integrals["length"][:,:,:] # I assume it to 
 # Information about the atmosphere
 #######################################################
 
+phi_cloves=cairt_nc_atm["phi"][:]
+
+phi_cloves_geocentric= []
+
+  for phi in phi_cloves
+    local N=1/sqrt(cosd(phi)^2+b_wgs84^2*sind(phi)^2)
+    local phic=atand(1-e_wgs84)*tand(phi)
+    push!(phi_cloves_geocentric,phic)  
+  end
 
 
-phi_cloves=cairt_nc_atm["phi"][:] |> fn-> @. GeoUtils._surface_from_geodesic_θdeg_to_geocentric_θdeg(fn)
 z_cloves=cairt_nc_atm["z"][:]
 
 altitudes_km = cairt_nc_atm["altitude"][:,:]
@@ -167,19 +174,19 @@ for i in eachindex(satx,saty)
   local norm1 = hypot(nx1,ny1)
   nx1/=norm1
   ny1/=norm1
-  @info " point_x: $(satx[i]), point_y: $(saty[i])"
-  @info " point_x: $(sx1+hsat*nx1), point_x: $(sy1+hsat*ny1)"
+  @info " px: $(satx[i]), py: $(saty[i])"
+  @info " px: $(sx1+hsat*nx1), px: $(sy1+hsat*ny1)"
   @info "------------------------------"
   @info " nx: $nx1, ny: $ny1"
 
   for j in 1:fov
-    inputray.point_x[(i-1)*fov+j]=satx[i]
-    inputray.point_y[(i-1)*fov+j]=saty[i]
+    inputray.px[(i-1)*fov+j]=satx[i]
+    inputray.py[(i-1)*fov+j]=saty[i]
     local angle= -view_angles_deg[(i-1)*fov+j]
     scan_direction=nadir_angle_normal(nx1,ny1,angle;outward=false)
     @info scan_direction
-    inputray.direction_x[(i-1)*fov+j]=scan_direction[1]
-    inputray.direction_y[(i-1)*fov+j]=scan_direction[2]
+    inputray.dx[(i-1)*fov+j]=scan_direction[1]
+    inputray.dy[(i-1)*fov+j]=scan_direction[2]
   end
 end
 
@@ -190,22 +197,22 @@ marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,
   ATM<:AbstractMatrix{AtmosphereProfile2D{T}},
   A<:AbstractVector{T}} where T=
 marco_ray_tracing!(t_out,θ_out,s_out,
-   inputray.point_x,inputray.point_y,
-   inputray.direction_x,inputray.direction_y,
+   inputray.px,inputray.py,
+   inputray.dx,inputray.dy,
   inputray.n,inputray.θmin,inputray.θmax,inputray.ascending,
   atmosphere.refraction_index_ave[1:end-1,1:end-1],atmosphere.θ_left[1:end,1],atmosphere.s_top[1,1:end],
   outputray.i,outputray.j,outputray.n,outputray.θ,outputray.t,outputray.h,
-  outputray.point_x,outputray.point_y,outputray.direction_x,outputray.direction_y,
-  tangent_quote;δ=1e-15,kwargs...)
+  outputray.px,outputray.py,outputray.dx,outputray.dy,
+  tangent_quote,kwargs...)
 
 start_scan = 1
 end_scan = 50
-num_scans = 140
+num_scans = 120
 begin
 test_retrieval=deepcopy(retrieval[start_scan:end_scan,1:num_scans+1])
 test_inputray=deepcopy(inputray[start_scan:end_scan])
 test_atmosphere=deepcopy(atmosphere)
-tangent_quote =Array{Float64}(undef, size(test_inputray.point_x))
+tangent_quote =Array{Float64}(undef, size(test_inputray.px))
 t_out= similar(tangent_quote)
 θ_out= similar(tangent_quote)
 s_out= similar(tangent_quote)
@@ -220,8 +227,6 @@ tangent_quote
 
 marco_ray_tracing!(t_out,θ_out,s_out, test_inputray,test_retrieval,test_atmosphere,tangent_quote)
 
-
-tangent_quote
 
 for j in 1:10
   fig=Figure(size=(600,1000))
@@ -255,20 +260,71 @@ for j in 1:10
   figure
   save("./scan$j.png",fig)
 end
+
+figure=Figure(size=(800,800))
+ax=Axis(figure[1,1])
+with_theme(theme_latexfonts()) do
+  f
+end
+
+
+tangent_quote=reshape(tangent_quote,5,10)./major_axis_earth
+
+tangent_points_luca=cairt_nc_scans["tangent_points"][1,:,:]
+
+
+abs2.(tangent_points_z_km-tangent_quote)
+
+
 figure
 reshape(tangent_quote,5,10).*major_axis_earth
 
 test_retrieval.h[:,73:76].*major_axis_earth
-tmarco=reshape(tangent_quote .*major_axis_earth,5,10)'
-
-tmarco[tmarco.>100].=NaN
+reshape(tangent_quote .*major_axis_earth,5,10)
 engineering_quotes
-tsgheri=tangent_points_z_km' *major_axis_earth
+tangent_points_z_km' *major_axis_earth
 
 
-tmarco-tangent_points_z_km' .*major_axis_earth
+fig=Figure()
+ax=Axis(fig[1,1])
+ww=48
+bb=3
+scatterlines!(ax,[(x,y) for (x,y) in zip(retrieval.px[ww,1:bb],retrieval.py)],label="engineering_quotes")
+fig
 
 
-tmarco
-tsgheri
-engineering_quotes
+
+
+figure=Figure()
+ax=Axis(figure[1,1])
+with_theme(theme_latexfonts()) do
+for inp in inputray
+  lines!(ax,
+  [ray(inp.px,inp.py,inp.dx,inp.dy,t) for t in (0,1)])
+end
+ext_theta=extrema(atmosphere.θ_left)
+ext_h    =extrema(atmosphere.s_top)
+θ_radii = atmosphere.θ_left[:,1]
+h_levels= atmosphere.s_top[1,:]
+for θ in θ_radii
+  lines!(ax,[ellipse(θ,h) for h in ext_h],color=:black )
+end
+for h in h_levels
+  lines!(ax,[ellipse(θ,h) for θ in LinRange(ext_theta...,1000)],color=:black )
+end
+xlims!(ax,0.960,1.0)
+ylims!(ax,-0.30,-0.15)
+end
+save("./issue_ray.png",figure)
+
+scatter!(ax,[(px,py) for (px,py) in zip(test_retrieval.px[1,2:end],test_retrieval.py[1,2:end])])
+TTT=10
+
+
+scatter!(ax,[(px,py) for (px,py) in zip(test_retrieval.px[1,2:TTT],test_retrieval.dy[1,2:TTT])])
+
+for (px,py,dx,dy,t) in zip(test_retrieval.px[1,2:end],test_retrieval.py[1,2:end],test_retrieval.dx[1,2:end],test_retrieval.dy[1,2:end],test_retrieval.t[1,2:end])
+  lines!(ax,[ray(px,py,dx,dy,t) for t in (0,1)])
+end
+
+test_retrieval.dx'
