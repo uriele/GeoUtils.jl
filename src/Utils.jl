@@ -352,3 +352,38 @@ _surface_from_geocentric_θdeg_to_geodesic_θdeg(θc::T) where T = _surface_from
 _surface_from_geocentric_θrad_to_geodesic_θrad(θc::T) where T = _surface_from_geocentric_θrad_to_geodesic_θrad(NormalizedEarth, θc)
 _surface_from_geodesic_θdeg_to_geocentric_θdeg(θ::T) where T = _surface_from_geodesic_θdeg_to_geocentric_θdeg(NormalizedEarth, θ)
 _surface_from_geodesic_θrad_to_geocentric_θrad(θ::T) where T = _surface_from_geodesic_θrad_to_geocentric_θrad(NormalizedEarth, θ)
+
+
+"""
+  @enum UnitsAngle
+
+Defines an enumeration `UnitsAngle` to represent units of angle measurement.
+The available options are:
+
+- `Degrees`: Represents angles measured in degrees.
+- `Radiants`: Represents angles measured in radians.
+"""
+@enum UnitsAngle begin
+  Degrees
+  Radiants
+end
+
+
+"""
+  get_angle_conversion(angle_units::UnitsAngle) -> Function
+
+Returns the appropriate conversion function for the given angle units.
+# Arguments
+- `angle_units::UnitsAngle`: The unit of the angle, which can be either `Degrees` or `Radiants`.
+
+# Returns
+- If `angle_units` is `Degrees`, the function returns `deg2rad`, which converts degrees to radians.
+- If `angle_units` is `Radiants`, the function returns `identity`, as no conversion is needed.
+"""
+function get_angle_conversion(angle_units::UnitsAngle)
+    angle_units==Degrees  && return deg2rad
+    angle_units==Radiants && return identity
+end
+
+
+s

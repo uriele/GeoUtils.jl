@@ -380,33 +380,48 @@ struct Orbit{T<:IEEEFloat}
     w::T
     ang::T
     h::T
-    other::T
+
+    Orbit{T}(z::T,w::T,ang::T,h::T) where T<:IEEEFloat = new{T}(z,w,ang,h)
+    Orbit(z::T,w::T,ang::T,h::T) where T<:IEEEFloat = new{T}(z,w,ang,h)
 end
 
+Orbit(z,w,ang,h) = Orbit(promote.(z,w,ang,h)...)
+Orbit(z::I,w::I,ang::I,h::I) where I<:Int = Orbit(float.(z,w,ang,h)...)
+Orbit(z::L,w::L,ang,h) where L<:Length = Orbit(ustrip.(uconvert.(km,(z,w)))...,ang,h)
+Orbit(z,w,ang,h::L) where L<:Length    = Orbit(z,w,ang,ustrip(uconvert(km,h)))
 
-function __read_orbit(::Type{T},file::String) where T
+
+
+function __read_orbit(::Type{T},file::String;angle_units::UnitsAngle=Degrees) where T
+  @info "Reading satellite orbit information from $file with angles assumed in $angle_units"
+  angle_conversion=get_angle_conversion(angle_units)
+
   open(file) do f
     lines=readlines(f)
 
     pos=findall(x->!isnothing(match(r"^\sSEQUENCE",x)),lines);
 
     nseq=length(pos)
-    mgeom=parse(Int,lines[pos[1]]+6)
-    orb=Matrix{Orbit{T}}(undef,nseq,mgeom)
+    mgeom=parse(Int,lines[pos[1]+6])
+    orb=StructArray(Matrix{Orbit{T}}(undef,nseq,mgeom))
 
 
     for j in 1:mgeom
       for i in eachindex(pos)
         sj=pos[i]+7+j
-        orb[i,j]=Orbit(parse.(T,split(lines[sj]))...)
+        orb[i,j]=Orbit(let
+        input_read=parse.(T,split(lines[sj]))
+        input_read[3]=angle_conversion(input_read[3])
+        input_read[1:4]
+        end...
+        )
       end
     end
-
    return orb
   end
 end
 
-__read_orbit(file::String)=_read_orbit(Float64,file)
+__read_orbit(file::String)=__read_orbit(Float64,file)
 
 function read_orbit(::Type{T},file::String) where T
   open(file) do f

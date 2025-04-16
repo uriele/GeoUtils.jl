@@ -425,6 +425,7 @@ end
 @inline _tangent_vector(args...)=_normal_vector(args...) |> x-> Vec2(x.y,-x.x)
 # Create Rays from the orbit
 
+@inline _rotation_matrix(θ)= SMatrix{2,2}([cosd(θ) sind(θ);-sind(θ) cosd(θ)] )
 """
     create_rays(datum::Datum,orb::Orbit)::Ray2D{T}
     create_rays(orb::Orbit)::Ray2D{T}
@@ -440,7 +441,6 @@ function create_rays(orb::Orbit)
 
   angle= orb.ang*INWARD_NORMAL
 
-  @inline _rotation_matrix(θ)= SMatrix{2,2}([cosd(θ) sind(θ);-sind(θ) cosd(θ)] )
   return Ray2D(Vec2(w,z),_rotation_matrix(angle)*Vec2(tx,ty))
 end
 
@@ -482,8 +482,8 @@ function create_bundle_rays(::Type{T},allorbits::Ao) where {T<:IEEEFloat,Ao<:Abs
     Rays.y[i]=z
     θ = allorbits[i].ang*INWARD_NORMAL
     tangent_magnitude=hypot(z,w)
-    cosθ=cos(θ)
-    sinθ=sin(θ)
+    cosθ=cosd(θ)
+    sinθ=sind(θ)
     tx=z/tangent_magnitude .*INWARD_NORMAL
     ty=-w/tangent_magnitude .*INWARD_NORMAL
     Rays.dx[i]=cosθ*tx+sinθ*ty

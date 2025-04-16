@@ -111,6 +111,11 @@ module GeoUtils
   export geocentric_θ_to_geodesic_θ
   export create_radii_from_θ,scale_earth_by_h
   export setDebugIntersection,getDebugIntersection
-  #export AzimuthElevationRange,AER
-  #export EastNorthUp,ENU
+
+  export get_angle_conversion
+  export Degrees,Radiants
+
+
+
+
 end

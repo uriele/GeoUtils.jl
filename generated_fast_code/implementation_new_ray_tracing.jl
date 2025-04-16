@@ -3,7 +3,7 @@ using Base: IEEEFloat
 using Makie,WGLMakie
 using CoordRefSystems # for information on earth
 
-using MacroTools
+#using MacroTools
 using Unitful
 #using Unrolled
 using BenchmarkTools #to benchmark
