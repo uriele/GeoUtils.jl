@@ -654,6 +654,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apo
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -693,6 +694,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apo
           fold = f
         end
       end
+      return nothing
       #   step block 2
       begin
         # update k ← k + 1
@@ -754,6 +756,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apo
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -854,6 +857,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apo
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -954,6 +958,7 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apo
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -1054,6 +1059,8 @@ function fast_minimization_distance!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apo
           p = -g / h
           # compute next θ
           θ = mod2pi(θ + p)
+
+          #@info "p_newton is $p  θ is $θ  t is $t"
         end
         # compute new (f,t)
         begin
@@ -1691,6 +1698,187 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+
+                #@info "p_newton is $p  θ is $θ  t is $t"
+              end
+              # compute new (f,t)
+              begin
+                begin
+                  cosθ = cos(θ)
+                  sinθ = sin(θ)
+                  bcosθ = b_normalized * cosθ
+                  bsinθ = b_normalized * sinθ
+                  cosθ² = cosθ * cosθ
+                end
+                begin
+                  R = 1 - e² * cosθ²
+                  N = 1 / sqrt(R)
+                  point_x2 = cosθ
+                  point_y2 = bsinθ
+                  direction_x2 = bcosθ
+                  direction_y2 = sinθ
+                  Fx = point_x2 + s * direction_x2 * N
+                  Fy = point_y2 + s * direction_y2 * N
+                end
+                t = -origin_times_direction + (direction_x1 * Fx + direction_y1 * Fy)
+                begin
+                  Px = point_x1 + t * direction_x1
+                  Py = point_y1 + t * direction_y1
+                end
+                begin
+                  fx = Fx - Px
+                  fy = Fy - Py
+                  f = fx * fx + fy * fy
+                end
+              end
+              # stopping criteria and update fold ← f
+              begin
+
+
+
+                if abs(f-fold) < δ && (penality_t==0)
+
+                    break
+                end
+
+                fold = f
+              end
+            end
+
+          # Newton loop
+          #@info "Starting the Newton loop θ0 is $θ"
+          for k in 1:kloops
+
+            ############################
+            # Updates every 5 iterations
+            if penality_t>0
+              rho=min(rho*gamma,rho_max)
+            end
+            ############################
+
+            # unroll block of 5 iterations
+            # unroll block
+            #   new function value and evaluation breaking criteria
+            #   step block 1
+            begin
+              # update k ← k + 1
+              # compute new θ
+              begin
+                # trigonometric function needed for computing the gradient and hessian
+                begin
+                  sinθ² = sinθ * sinθ
+                  half_sin2θ = sinθ * cosθ
+                  cos2θ = cosθ² - sinθ²
+                end
+                # compute the gradient
+                begin
+                  begin
+                    dpoint_x2dθ = -sinθ
+                    dpoint_y2dθ = bcosθ
+                    dpoint_x2dθ_0 = -bsinθ
+                    dpoint_y2dθ_0 = cosθ
+                  end
+                  begin
+                    half_dR = e² * half_sin2θ
+                    half_dR² = half_dR * half_dR
+                    half_d²R = e² * cos2θ
+                    N² = N * N
+                    dNdθ = -half_dR
+                    d²Ndθ² = -half_d²R + 3 * N² * half_dR²
+                    ddirection_x2dθ = (dpoint_x2dθ_0 + N² * dNdθ * direction_x2) * N
+                    ddirection_y2dθ = (dpoint_y2dθ_0 + N² * dNdθ * direction_y2) * N
+                  end
+                  begin
+                    dFxdθ = dpoint_x2dθ + s * ddirection_x2dθ
+                    dFydθ = dpoint_y2dθ + s * ddirection_y2dθ
+                    dtdθ = direction_x1 * dFxdθ + direction_y1 * dFydθ
+                    dPxdθ = direction_x1 * dtdθ
+                    dPydθ = direction_y1 * dtdθ
+                    dfxdθ = dFxdθ - dPxdθ
+                    dfydθ = dFydθ - dPydθ
+                  end
+                  g = fx * dfxdθ + fy * dfydθ
+                end
+                # compute the hessian
+                begin
+                  begin
+                    d²point_x2dθ² = -point_x2
+                    d²point_y2dθ² = -point_y2
+                    d²direction_x2dθ²_0 = -direction_x2
+                    d²direction_y2dθ²_0 = -direction_y2
+                  end
+                  begin
+                    d²direction_x2dθ² = (d²direction_x2dθ²_0 + (2 * dpoint_x2dθ_0 * dNdθ + d²Ndθ² * N² * direction_x2) * N²) * N
+                    d²direction_y2dθ² = (d²direction_y2dθ²_0 + (2 * dpoint_y2dθ_0 * dNdθ + d²Ndθ² * N² * direction_y2) * N²) * N
+                    d²Fxdθ² = d²point_x2dθ² + d²direction_x2dθ²
+                    d²Fydθ² = d²point_y2dθ² + d²direction_y2dθ²
+                  end
+                  begin
+                    d²tdθ² = direction_x1 * d²Fxdθ² + direction_y1 * d²Fydθ²
+                    d²Pxdθ² = direction_x1 * d²tdθ²
+                    d²Pydθ² = direction_y1 * d²tdθ²
+                    dfxdθ_squared = dfxdθ * dfxdθ
+                    dfydθ_squared = dfydθ * dfydθ
+                    d²fxdθ² = d²Fxdθ² - d²Pxdθ²
+                    d²fydθ² = d²Fydθ² - d²Pydθ²
+                  end
+                  h = dfxdθ_squared + dfydθ_squared + fx * d²fxdθ² + fy * d²fydθ²
+                  # insure positive definess of the hessian by adding a const
+                  # similar to how LDLT works to ensure positive definiteness of matrix
+                  h = abs(h) > 10 ^ -5 ? abs(h) :  10 ^ -5
+                end
+                # penality for negative t
+                begin
+                  penality_t = 0
+                  g_t = 0
+                  h_t = 0
+                  if t < 0
+                    t² = t * t
+                    penality_t = -rho * t*t²
+                    g_t= -3t²*dtdθ
+                    h_t = -t²*d²tdθ²-6t*dtdθ*dtdθ
+                    g_t*=rho
+                    h_t*=rho
+                  end
+                  f_with_penality = f + penality_t
+
+                  g += g_t
+                  h += h_t
+
+
+
+                end
+
+
+                #@info "e²: $e²  θ: $θ cosθ^2: $(cos(θ)^2) R₀: $(1-e² * cos(θ)^2)"
+                #@info "N₀  $N"
+                #@info "∂Nx∂θ $(dNdθ*N²)"
+                #@info "∂²Nx∂θ² $(d²Ndθ² * N² * N²)"
+                #@info "∂²Nx∂θ² $dPxdθ"
+                #@info "∂Px∂θ $dPxdθ"
+                #@info "∂Py∂θ $dPydθ"
+                #@info "∂Fx∂θ $dFxdθ"
+                #@info "∂Fy∂θ $dFydθ"
+                #@info "∂fx∂θ $dfxdθ"
+                #@info "∂fy∂θ $dfydθ"
+                #@info "∂²Px∂θ² $d²Pxdθ²"
+                #@info "∂²Py∂θ² $d²Pydθ²"
+                #@info "∂²Fx∂θ² $d²Fxdθ²"
+                #@info "∂²Fy∂θ² $d²Fydθ²"
+                #@info "∂²fx∂θ² $d²fxdθ²"
+                #@info "∂²fy∂θ² $d²fydθ²"
+                #@info "g_step $g"
+                #@info "h_step $h"
+                #@info "p_step $(-g/h)"
+                #return
+
+
+                # compute the newton step
+                p = -g / h
+                # compute next θ
+                θ = mod2pi(θ + p)
+
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -1826,6 +2014,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -1960,6 +2149,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -2094,6 +2284,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -2228,6 +2419,7 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
                 p = -g / h
                 # compute next θ
                 θ = mod2pi(θ + p)
+                #@info "p_newton is $p  θ is $θ  t is $t"
               end
               # compute new (f,t)
               begin
@@ -2337,6 +2529,12 @@ function fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,apoint_x::A,apoint_y::A,a
 
         # find new index_i and index_j as well as the neighbors refractive index
 
+        #@info "pre: t is $t  s: $s θ: $θ"
+        #@info "px1: $px1, py1: $py1, px2: $px2, py2: $py2"
+        #@info "dx1: $dx1, dy1: $dy1, dx2: $dx2, dy2: $dy2"
+        #return (px1, py1, px2, py2, dx1, dy1, dx2, dy2, θ, t, s)
+
+        ###############
         begin
           if iter==1 && initialized==false
             # find the index of the wedge using binary search

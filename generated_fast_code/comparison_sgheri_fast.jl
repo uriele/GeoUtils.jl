@@ -1,9 +1,19 @@
 include("./implementation_new_ray_tracing.jl")
+include("./single_functions.jl")
 using NCDatasets
 using DataFrames
 using GeoUtils
 using StructArrays
+using WGLMakie
+function nadir_angle(w,z,ang)
+  θ = atan(z/w)
+ (nx,ny)=(-w,-z)|> x-> x./hypot(x...) .*-1.0
+ #################################
+ angle= ang
 
+ dir=_rotation_matrix(angle)*[nx,ny]
+ return (dir[1],dir[2])
+end
 major_axis_earth = majoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(Unitful.km,x) |> ustrip
 minor_axis_earth = minoraxis(ellipsoid(WGS84Latest)) |> x-> uconvert(Unitful.km,x) |> ustrip
 eccentricity²_earth= eccentricity²(ellipsoid(WGS84Latest))
@@ -12,16 +22,10 @@ cd("generated_fast_code")
 #  EARTH MODEL
 ##################################################################
 b_wgs84 = minor_axis_earth/major_axis_earth
-
-#=
-set_minoraxis(b_wgs84)
-b_mine  = get_minoraxis()
-e²_mine = get_e²()
-eccentricity²_earth≈get_e²()
-b_wgs84==b_mine
-=#
+e_wgs84 = sqrt(1-b_wgs84^2)
+ray(px,py,dx,dy,t)=(px,py).+(t*dx,t*dy)
+ellipse(θ,h)=(cos(θ),b_wgs84*sin(θ)).+h.*(b_wgs84*cos(θ),sin(θ))./sqrt(1-e_wgs84*cos(θ)*cos(θ))
 ##################################################################
-
 cairt_nc=Dataset("../generated_fast_code/cairt_trace_out_nuovo.nc")
 cairt_nc.group
 cairt_nc_orbit     = cairt_nc.group["orbit"]
@@ -30,36 +34,19 @@ cairt_nc_scans     = cairt_nc.group["scans"]
 cairt_nc_integrals = cairt_nc.group["integrals"]
 
 # Lat and Lon
-lat_degrees=cairt_nc_atm["latitude"][:]
-lon_degrees=cairt_nc_atm["longitude"][:]
-
 # Info scans
-polar_coordinates_along_orbit_deg = cairt_nc_scans["scans_phi"][:]
-# Don't know what is geometry
-# engineering quotes in km
 engineering_quotes = cairt_nc_scans["engineering_quotes"][:]
-ccd_angles_deg = cairt_nc_scans["ccd_angles"][:]
 view_angles_deg = cairt_nc_scans["view_angles"][:,:]
 tangent_points_z_km  = cairt_nc_scans["tangent_points"][1,:,:]
 tangent_points_θ_deg = cairt_nc_scans["tangent_points"][2,:,:]
 #######################################################
-cairt_nc_orbit
-#######################################################
-npaths_scans = cairt_nc_integrals["npaths"][:,:]  # I assume it to be the number of interceptions
-
-phi_index_cloves_per_los = cairt_nc_integrals["phi_idx"][:,:,:] # I assume it to be the index of the phi clove
-z_index_per_los          = cairt_nc_integrals["z_idx"][:,:,:] # I assume it to be the index of the z clove
 path_lengths_km          = cairt_nc_integrals["length"][:,:,:] # I assume it to be the path length  equivalent to t in my code
-
-cairt_nc_integrals
 #######################################################
 # Information about the atmosphere
 #######################################################
 
 phi_cloves=cairt_nc_atm["phi"][:]
 z_cloves=cairt_nc_atm["z"][:]
-
-ngrids= cairt_nc_atm["ngrid"][:]
 
 altitudes_km = cairt_nc_atm["altitude"][:,:]
 
@@ -73,12 +60,6 @@ altitudes_km./=major_axis_earth
 tangent_points_z_km./=major_axis_earth
 path_lengths_km./=major_axis_earth
 #########################################################
-extrema(ngrids)
-extrema(phi_index_cloves_per_los)
-extrema(z_index_per_los)  # i-1
-# point of entrance is largest clove index (h-1)
-min_altitude=extrema(abs.(z_index_per_los[:,:,:]))[1]
-max_altitude=extrema(z_index_per_los[:,:,:])[2]
 
 # get the average temperature and pressure in each clove
 size(phi_cloves)
@@ -86,8 +67,12 @@ temperature_celsius =similar(temperature_K)
 
 temperature_celsius = uconvert.(u"°C",temperature_K*u"K") |> fn-> @. ustrip(fn)
 pressure_Pa = uconvert.(u"Pa",pressure_hPa*u"hPa") |> fn-> @. ustrip(fn)
-
-
+reverse!(temperature_celsius,dims=1)
+reverse!(pressure_Pa,dims=1)
+reverse!(z_cloves)
+#reverse!(phi_cloves)
+z_cloves
+@. mod2pi(deg2rad(phi_cloves))
 #initialize atmosphere
 atmosphere = StructArray(Matrix{AtmosphereProfile2D{Float64}}(undef, size(temperature_K,2),size(temperature_K,1)))
 
@@ -95,26 +80,21 @@ for j in eachindex(z_cloves)
     for i in eachindex(phi_cloves)
         atmosphere[i,j]=AtmosphereProfile2D( 1.0,
         let
-          ismissing(temperature_K[j,i]) ? NaN : temperature_celsius[j,i]
+          ismissing(temperature_celsius[j,i]) ? NaN : temperature_celsius[j,i]
         end,
         let
-          ismissing(pressure_hPa[j,i]) ? NaN : pressure_Pa[j,i]
+          ismissing(pressure_Pa[j,i]) ? NaN : pressure_Pa[j,i]
         end,
-        deg2rad(lat_degrees[i]),
-        z_cloves[end-j+1]./major_axis_earth
+        mod2pi(deg2rad(phi_cloves[i])),
+        z_cloves[j]./major_axis_earth
         )
     end
 end
-
-z_cloves
-
-atm_h
 
 begin
   # average radially
   atmosphere.temperature_ave[1:end-1,:] = (atmosphere.temperature_ave[1:end-1,:]+atmosphere.temperature_ave[2:end,:])./2
   atmosphere.pressure_ave[1:end-1,:] = (atmosphere.pressure_ave[1:end-1,:]+atmosphere.pressure_ave[2:end,:])./2
-end
   # average altitude
   atmosphere.temperature_ave[:,1:end-1] = (atmosphere.temperature_ave[:,1:end-1]+atmosphere.temperature_ave[:,2:end])./2
   atmosphere.pressure_ave[:,1:end-1] = ( atmosphere.pressure_ave[:,2:end]- atmosphere.pressure_ave[:,1:end-1])./(log.(atmosphere.pressure_ave[:,2:end]./atmosphere.pressure_ave[:,1:end-1]))
@@ -127,49 +107,40 @@ end
   # average altitude
 end
 # get refractive index
-phi_cloves
-z_cloves
-atmosphere.pressure_ave
-fig=Figure()
-ax,suf=surface(fig[1,1],atmosphere.temperature_ave)
-ax,suf=surface(atmosphere.pressure_ave)
+
+@inline extrema_noNaN(x)=extrema(filter(x-> !( ismissing(x) || isnan(x)) ,x))
+
+
+figure=Figure(size=(800/1.5,800))
+with_theme(theme_latexfonts()) do
+  ax1=Axis(figure[1,1][1,1],title="refraction_index (n-1)",xlabel="ϕ°",ylabel="h km")
+  ax2=Axis(figure[2,1][1,1],title="temperature",xlabel="ϕ°",ylabel="h km")
+  ax3=Axis(figure[3,1][1,1],title="pressure",xlabel="ϕ°",ylabel="h km")
 
 
 
-figure=Figure(size=(800/2,800))
-begin
-ax1=Axis(figure[1,1][1,1],title="refraction_index (n-1)",xlabel="ϕ°",ylabel="h km")
-ax2=Axis(figure[2,1][1,1],title="temperature",xlabel="ϕ°",ylabel="h km")
-ax3=Axis(figure[3,1][1,1],title="pressure",xlabel="ϕ°",ylabel="h km")
-
-s1=surface!(ax1,phi_cloves,z_cloves,atmosphere.refraction_index_ave.-1.0)
-s2=surface!(ax2,phi_cloves,z_cloves,atmosphere.temperature_ave)
-s3=surface!(ax3,phi_cloves,z_cloves,pressure_hPa)
-Colorbar(figure[1,1][1,2],s1)
-Colorbar(figure[2,1][1,2],s2)
-Colorbar(figure[3,1][1,2],s3)
+  s1=surface!(ax1,atmosphere.θ_left,atmosphere.s_top,
+  atmosphere.refraction_index_ave.-1.0)
+  s2=surface!(ax2,atmosphere.θ_left,atmosphere.s_top,
+  atmosphere.temperature_ave)
+  s3=surface!(ax3,atmosphere.θ_left,atmosphere.s_top,
+  atmosphere.pressure_ave./extrema_noNaN(atmosphere.pressure_ave)[2])
+  Colorbar(figure[1,1][1,2],s1)
+  Colorbar(figure[2,1][1,2],s2)
+  Colorbar(figure[3,1][1,2],s3)
 end
 figure
 save("./refraction_index_temperature_pressure.png",figure)
-
 
 # Using equation from part 3 of Casia DEL006
 r_satellite  = cairt_nc_orbit["radius"][1]/major_axis_earth
 inclination  = cairt_nc_orbit["inclination"][1]
 
+# angle of the current position in degrees
+scans_phi = cairt_nc_scans["scans_phi"][:]
+satx = @. r_satellite*cosd(scans_phi)
+saty = @. r_satellite*sind(scans_phi)
 
-inclination  = cairt_nc_orbit["inclination"]
-cairt_nc_orbit
-cairt_nc_atm
-
-lon0= cairt_nc_orbit["lon0"][1]
-# reduced coordinates
-px = r_satellite.*cosd(inclination)
-py = r_satellite.*sind(inclination)
-#px = r_satellite.*cosd(lon0)
-#py = r_satellite.*sind(lon0)
-
-cairt_nc_atm
 total_scans = prod(size(tangent_points_z_km))
 max_iterations = 140
 
@@ -180,95 +151,42 @@ max_iterations = 140
 retrieval = StructArray(Matrix{ResultsRayTracing{Float64}}(undef, total_scans,max_iterations+1))
 # Input array
 inputray  = StructArray(Vector{InputRay{Float64}}(undef, total_scans))
+θsat,hsat =  geocentric_xy_to_geodesic_θ(satx[2],saty[2])
 
-# need to compute the normal to the surface I can use the gradient to the surface with
-# Find the x,y given the θ_geodesic
-# 1. find angle of the satellite in geodesic coordinates
-#   1.1 Initial guess geodesic angle
-    (θ0_geodesic,h_sat)= geocentric_xy_to_geodesic_θ(px,py)
-#   1.2 correct the angle
-    θ0_geodesic_rad=deg2rad(θ0_geodesic)
-b_mine = b_wgs84
-    get_minoraxis(::T) where T = b_wgs84
-    get_e²(::T) where T = 1-(b_wgs84^2)
-    θ_geodesic_rad = initialize_theta(θ0_geodesic_rad,px,py)
-# 2. Compute the cartesian cordinates
-    earth_x,earth_y = (cos(θ_geodesic_rad),sin(θ_geodesic_rad)*b_mine)
-# 3. Get the normal to the surface
-    normal_earth_x,normal_earth_y = earth_x,earth_y/b_mine^2
-    (normal_earth_x,normal_earth_y) = (normal_earth_x,normal_earth_y)./hypot(normal_earth_x,normal_earth_y)
-# 4. Confirm the result
-    p′_x,p′_y = (earth_x,earth_y) .+ (normal_earth_x,normal_earth_y).*h_sat
-    @assert hypot(p′_x-px,p′_y-py)<1e10  # true
-# 5. Set the inputray with the origin of the satellite
-    inputray.px[:].=px
-    inputray.py[:].=py
-# 6. Compute the direction of the scan angles
-# The scan is give in the geodesic coordinates AND as a nadir angle
-# so I need to use the nadir angle normal to compute the direction
-    for i in eachindex(view_angles_deg)
-      local angle= view_angles_deg[i]
-      scan_direction=nadir_angle_normal(normal_earth_y,normal_earth_x,angle;outward=true)
-      inputray.dx[i]=scan_direction[1]
-      inputray.dy[i]=scan_direction[2]
-    end
-# 7. Visually check if the direction makes sense
+# 1. Set the initial conditions
+fov=5  # number of field of vies per scan
+for i in eachindex(satx,saty)
+  local θsat,hsat =  geocentric_xy_to_geodesic_θ(satx[i],saty[i])
+  @info "satellite position" θsat,hsat
+  local N = 1/sqrt(cosd(θsat)^2+b_wgs84^2*sind(θsat)^2)
+  local sx1,sy1 = (N*cosd(θsat),b_wgs84^2*N*sind(θsat))
+  local nx1,ny1 = (sx1,sy1/b_wgs84^2)
+  local norm1 = hypot(nx1,ny1)
+  nx1/=norm1
+  ny1/=norm1
+  @info " px: $(satx[i]), py: $(saty[i])"
+  @info " px: $(sx1+hsat*nx1), px: $(sy1+hsat*ny1)"
+  @info "------------------------------"
+  @info " nx: $nx1, ny: $ny1"
 
-e²_wgs84 = eccentricity²(ellipsoid(WGS84Latest))
-    ellipse(θ,h)= (cos(θ),sin(θ)*b_mine).+(b_mine*cos(θ),sin(θ)).*h./(sqrt(1-e²_wgs84*cos(θ)^2))
-    # SHIFT THE ORIGIN OF THE GRID BY THE ANGLE OF THE SATELLITE
-    atmosphere.θ_left[:,:]=repeat(deg2rad.(lat_degrees[:]),1,size(atmosphere,2)).+θ_geodesic_rad
+  for j in 1:fov
+    inputray.px[(i-1)*fov+j]=satx[i]
+    inputray.py[(i-1)*fov+j]=saty[i]
+    local angle= -view_angles_deg[(i-1)*fov+j]
+    scan_direction=nadir_angle_normal(nx1,ny1,angle;outward=false)
+    @info scan_direction
+    inputray.dx[(i-1)*fov+j]=scan_direction[1]
+    inputray.dy[(i-1)*fov+j]=scan_direction[2]
+  end
+end
 
-    figure=Figure()
-    ax=Axis(figure[1,1][1,1])
-#    let
-      hh= extrema(atmosphere.s_top)[2]
-      atmosphere.θ_left[:,1]
-      for θ in atmosphere.θ_left[:,1]
-        lines!(ax,[ellipse(θ,h) for h in (0,hh) ],color=:black)
-      end
-      (thetamin,thetamax)= extrema(atmosphere.θ_left)
-
-      for h in atmosphere.s_top[1,:]
-        lines!(ax,[ellipse(θ,h) for θ in LinRange(thetamin,thetamax,1000) ],color=:black)
-      end
-      xlims!(ax,0.05,0.55)
-      ylims!(ax,0.85,1.018)
-      for i  in 1:total_scans
-         _px=inputray.px[i]
-         _py=inputray.py[i]
-         _dx=inputray.dx[i]
-         _dy=inputray.dy[i]
-       lines!(ax,[(_px,_py).+(_dx,_dy).*t for t in (0,5)] ,color=:red)
-      end
-    end
-
-
-    h=cairt_nc_scans["tangent_points"][1,:,:]/major_axis_earth
-    θ=cairt_nc_scans["tangent_points"][2,:,:].+rad2deg(θ_geodesic_rad)
-
-    NN(theta)=1/sqrt(cosd(theta)^2+b_wgs84^2*sind(theta)^2)
-
-    point_ellipse(theta,h)= ((NN(theta)+h)*cosd(theta),sind(theta)*(b_mine^2*NN(theta)+h))
-
-list_of_points = [point_ellipse(θ,h) for (θ,h) in zip(θ,h)]
-
-    scatter!(ax,list_of_points[:],color=:blue)
-    # Atmosphere array
-atmosphere = atmosphere
-# tangent quote
-tangent_quote =Array{Float64}(undef, total_scans)
-t_out= similar(tangent_quote)
-θ_out= similar(tangent_quote)
-s_out= similar(tangent_quote)
-
-fast_ray_tracing!(t_out::A,θ_out::A,s_out::A,
+marco_ray_tracing!(t_out::A,θ_out::A,s_out::A,
   inputray::IR,outputray::OR,atmosphere::ATM,
   tangent_quote::A;kwargs...) where {IR<:AbstractVector{InputRay{T}},
   OR<:AbstractMatrix{ResultsRayTracing{T}},
   ATM<:AbstractMatrix{AtmosphereProfile2D{T}},
   A<:AbstractVector{T}} where T=
-fast_ray_tracing!(t_out,θ_out,s_out,
+marco_ray_tracing!(t_out,θ_out,s_out,
    inputray.px,inputray.py,
    inputray.dx,inputray.dy,
   inputray.n,inputray.θmin,inputray.θmax,inputray.ascending,
@@ -277,92 +195,110 @@ fast_ray_tracing!(t_out,θ_out,s_out,
   outputray.px,outputray.py,outputray.dx,outputray.dy,
   tangent_quote,kwargs...)
 
-scan_testing = 1
-num_scans = 30
+start_scan = 48
+end_scan = 50
+num_scans = 5
 begin
-test_retrieval=deepcopy(retrieval[1:1,1:num_scans+1])
-test_inputray=deepcopy(inputray[1:1])
+test_retrieval=deepcopy(retrieval[start_scan:end_scan,1:num_scans+1])
+test_inputray=deepcopy(inputray[start_scan:end_scan])
 test_atmosphere=deepcopy(atmosphere)
-tangent_quote =Array{Float64}(undef, scan_testing)
+tangent_quote =Array{Float64}(undef, size(test_inputray.px))
 t_out= similar(tangent_quote)
 θ_out= similar(tangent_quote)
 s_out= similar(tangent_quote)
 end
 
 
-
-
-fast_ray_tracing!(t_out,θ_out,s_out, test_inputray,test_retrieval,test_atmosphere,tangent_quote)
-t_out
-test_retrieval[1,2].n
-test_retrieval[1,3].n
-
-test_retrieval[1,:].py
-tangent_quote
-scatter!(ax,test_retrieval[1,:].px,test_retrieval[1,:].py,color=:black)
-
-inputray.n
-tangent_quote
-atmosphere.refraction_index,ave[54,1]
-
-
-save("./ray_tracing.png",figure)
-reft_out
-tangent_quote
-
 tangent_quote
 
 
-atmosphere
-typeof(atmosphere)
-typeof(inputray.px)
+#using BenchmarkTools
+#@benchmark marco_ray_tracing!($t_out,$θ_out,$s_out, $test_inputray,$test_retrieval,$test_atmosphere,$tangent_quote)
 
-incident_refractive_index = ones(Float64,nrays)
-adx
-ascending = [false for _ in 1:nrays]
-incident_refractive_index = ones(Float64,nrays)
-retrieval_i = zeros(Int,nrays,niterations+1)
-retrieval_j = similar(retrieval_i)
-retrieval_θ = zeros(Float64,nrays,niterations+1)
-retrieval_t = similar(retrieval_θ)
-retrieval_h = similar(retrieval_θ)
-retrieval_n = similar(retrieval_θ)
-retrieval_px = similar(retrieval_θ)
-retrieval_py = similar(retrieval_θ)
-retrieval_dx = similar(retrieval_θ)
-retrieval_dy = similar(retrieval_θ)
-tangent_quote = similar(θ_out)
-M=20
-N=180
-N_atmn= N
-M_atmn= M-1
-atm_h = [ exp(-x) for x in LinRange(0,3,M)]
-atm_θ = [ θ for θ in LinRange(0,2π,N+1)][1:end-1]
-atm_n = ones(Float64,N_atmn,M_atmn)
-M_atmn
-n_horizontal = 1.0.+0.00027.*(1.0.-atm_h[1:end-1])
-n_vertical = @. sin(atm_θ[1:end])*0.0000
-atm_n[:,:]=repeat(n_horizontal',N_atmn,1)
-atm_n[:,:]+=repeat(n_vertical,1,M_atmn)
+marco_ray_tracing!(t_out,θ_out,s_out, test_inputray,test_retrieval,test_atmosphere,tangent_quote)
+
+
+for j in 1:10
+  fig=Figure(size=(600,1000))
+  with_theme(theme_latexfonts()) do
+
+    jjj=60
+    ax1=Axis(fig[1,1][1,1],title="refractive index in clove",xlabel="iteration",ylabel="n-1")
+    ax2=Axis(fig[2,1][1,1],title="length ray",xlabel="iteration",ylabel="km")
+    ax3=Axis(fig[3,1][1,1],title="orbital coordinate",xlabel="iteration",ylabel="θ°")
+    ax4=Axis(fig[4,1][1,1],title="height from surface",xlabel="iteration",ylabel="altitude km")
+
+
+    for i in 1:5
+    lines!(ax1,1:jjj-2,[(r-1) for r in test_retrieval.n[i+fov*(j-1),3:jjj]],label="LOS $i",linewidth=3)
+      lines!(ax2,1:jjj-2,[r.*major_axis_earth for r in test_retrieval.t[i+fov*(j-1),3:jjj]],label="LOS $i",linewidth=3)
+      lines!(ax3,1:jjj-2,[rad2deg(r) for r in test_retrieval.θ[i+fov*(j-1),3:jjj]],label="LOS $i",linewidth=3)
+      lines!(ax4,1:jjj-2,[r.*major_axis_earth for r in test_retrieval.h[i+fov*(j-1),3:jjj]],label="LOS $i",linewidth=3)
+      xlims!(ax1,1,jjj-2)
+      xlims!(ax2,1,jjj-2)
+      xlims!(ax3,1,jjj-2)
+      xlims!(ax4,1,jjj-2)
+    end
+    Legend(fig[1,1][1,2],ax1)
+    Legend(fig[2,1][1,2],ax2)
+    Legend(fig[3,1][1,2],ax3)
+    Legend(fig[4,1][1,2],ax4)
+
+    Label(fig[0, :][1,1], "Scan $j";tellwidth=false, fontsize=30)
+
+  end
+  figure
+  save("./scan$j.png",fig)
+end
+figure
+reshape(tangent_quote,5,10).*major_axis_earth
+
+test_retrieval.h[:,73:76].*major_axis_earth
+reshape(tangent_quote .*major_axis_earth,5,10)
+engineering_quotes
+tangent_points_z_km' *major_axis_earth
+
+
+fig=Figure()
+ax=Axis(fig[1,1])
+ww=48
+bb=3
+scatterlines!(ax,[(x,y) for (x,y) in zip(retrieval.px[ww,1:bb],retrieval.py)],label="engineering_quotes")
+fig
+
+
+
+
+figure=Figure()
+ax=Axis(figure[1,1])
+with_theme(theme_latexfonts()) do
+for inp in inputray
+  lines!(ax,
+  [ray(inp.px,inp.py,inp.dx,inp.dy,t) for t in (0,1)])
+end
+ext_theta=extrema(atmosphere.θ_left)
+ext_h    =extrema(atmosphere.s_top)
+θ_radii = atmosphere.θ_left[:,1]
+h_levels= atmosphere.s_top[1,:]
+for θ in θ_radii
+  lines!(ax,[ellipse(θ,h) for h in ext_h],color=:black )
+end
+for h in h_levels
+  lines!(ax,[ellipse(θ,h) for θ in LinRange(ext_theta...,1000)],color=:black )
+end
+xlims!(ax,0.960,1.0)
+ylims!(ax,-0.30,-0.15)
+end
+save("./issue_ray.png",figure)
+
+scatter!(ax,[(px,py) for (px,py) in zip(test_retrieval.px[1,2:end],test_retrieval.py[1,2:end])])
+TTT=10
+
+
+scatter!(ax,[(px,py) for (px,py) in zip(test_retrieval.px[1,2:TTT],test_retrieval.dy[1,2:TTT])])
+
+for (px,py,dx,dy,t) in zip(test_retrieval.px[1,2:end],test_retrieval.py[1,2:end],test_retrieval.dx[1,2:end],test_retrieval.dy[1,2:end],test_retrieval.t[1,2:end])
+  lines!(ax,[ray(px,py,dx,dy,t) for t in (0,1)])
 end
 
-fast_ray_tracing!(t_out,θ_out,s_out,
-apx,apy,adx,ady,
-incident_refractive_index,
-aθmin,aθmax,ascending,
-atm_n,atm_θ,atm_h,
-retrieval_i,retrieval_j,
-retrieval_n,retrieval_θ,
-retrieval_t,retrieval_h,
-retrieval_px,retrieval_py,
-retrieval_dx,retrieval_dy,
-tangent_quote)
-
-
-
-
-
-fig = Figure()
-ax  = Axis(fig[1,1][1,1])
-lines!(ax,[(cosd(θ),b_mine*sind(θ)) for θ in range(0,stop=365,length=100)],color=:black)
-scatter!(ax,px,py,markersize=51)
+test_retrieval.dx'
