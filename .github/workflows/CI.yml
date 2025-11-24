@@ -46,7 +46,7 @@ jobs:
           - x64
     steps:
       # checkout the repository
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
@@ -68,7 +68,7 @@ jobs:
     env: # environment variables
       GP_TOKEN: ${{ secrets.GP_TOKEN }} # If authenticating with GitHub Actions token
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
